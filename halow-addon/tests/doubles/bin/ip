@@ -1,0 +1,122 @@
+#!/bin/bash
+# Fake `ip` for the bridge, backend and station tests. It records every call and keeps a
+# tiny interface state in the fake sysfs tree HALOW_SYS_CLASS_NET_DIR, in the same layout
+# the real code reads (address, bridge/stp_state, brif/<port>, <port>/master symlink,
+# <port>/brport/isolated), plus a private .addrs file per interface for `ip addr`.
+#
+# Controls (environment):
+#   HALOW_FAKE_LOG    file every call is appended to ("ip <args>")
+#   HALOW_FAKE_FAIL   ';'-separated globs matched against "ip <args>": exit 2, change nothing
+#   HALOW_FAKE_NOOP   ';'-separated globs: exit 0 but change nothing
+#   HALOW_FAKE_NEIGH  file printed by `ip neigh show ...`
+#   HALOW_PROC_SYS_DIR when set, `link add`/`link del` also create/remove the
+#                     interface's net/ipv6/conf/<name>/disable_ipv6 (value 0)
+set -f
+sys="${HALOW_SYS_CLASS_NET_DIR:?}"
+cmd="ip $*"
+printf '%s\n' "$cmd" >> "${HALOW_FAKE_LOG:-/dev/null}"
+
+_match() {
+    local list="$1" p IFS=';'
+    for p in $list; do
+        [ -n "$p" ] || continue
+        case "$cmd" in $p) return 0 ;; esac
+    done
+    return 1
+}
+if _match "${HALOW_FAKE_FAIL:-}"; then echo "fake ip: injected failure: $cmd" >&2; exit 2; fi
+if _match "${HALOW_FAKE_NOOP:-}"; then exit 0; fi
+
+while [ "${1:-}" = "-4" ] || [ "${1:-}" = "-6" ]; do shift; done
+obj="${1:-}"; shift || true
+case "$obj" in
+    link)
+        sub="${1:-}"; shift || true
+        case "$sub" in
+            add)
+                name="$1"
+                if [ -e "$sys/$name" ]; then echo "RTNETLINK answers: File exists" >&2; exit 2; fi
+                mkdir -p "$sys/$name/bridge" "$sys/$name/brif"
+                echo "aa:00:00:00:00:99" > "$sys/$name/address"
+                echo 1 > "$sys/$name/bridge/stp_state"
+                echo down > "$sys/$name/operstate"
+                if [ -n "${HALOW_PROC_SYS_DIR:-}" ] && [ -d "$HALOW_PROC_SYS_DIR/net/ipv6/conf" ]; then
+                    mkdir -p "$HALOW_PROC_SYS_DIR/net/ipv6/conf/$name"; echo 0 > "$HALOW_PROC_SYS_DIR/net/ipv6/conf/$name/disable_ipv6"
+                fi
+                ;;
+            del|delete)
+                [ "${1:-}" = "dev" ] && shift
+                name="$1"
+                if [ ! -d "$sys/$name" ]; then echo "Cannot find device \"$name\"" >&2; exit 1; fi
+                for p in "$sys/$name/brif"/*; do
+                    [ -e "$p" ] || continue
+                    rm -f "$sys/${p##*/}/master"; rm -rf "$sys/${p##*/}/brport"
+                done
+                rm -rf "$sys/$name"
+                [ -z "${HALOW_PROC_SYS_DIR:-}" ] || rm -rf "$HALOW_PROC_SYS_DIR/net/ipv6/conf/$name"
+                ;;
+            set)
+                [ "${1:-}" = "dev" ] && shift
+                name="$1"; shift
+                if [ ! -d "$sys/$name" ]; then echo "Cannot find device \"$name\"" >&2; exit 1; fi
+                while [ $# -gt 0 ]; do
+                    case "$1" in
+                        up|down) echo "$1" > "$sys/$name/operstate"; shift ;;
+                        address) echo "$2" > "$sys/$name/address"; shift 2 ;;
+                        master)
+                            b="$2"
+                            [ -d "$sys/$b/brif" ] || { echo "fake ip: $b is not a bridge" >&2; exit 2; }
+                            rm -f "$sys/$name/master"
+                            ln -s "../$b" "$sys/$name/master"
+                            : > "$sys/$b/brif/$name"
+                            mkdir -p "$sys/$name/brport"
+                            echo 0 > "$sys/$name/brport/isolated"
+                            shift 2
+                            ;;
+                        nomaster)
+                            m="$(readlink "$sys/$name/master" 2>/dev/null || true)"; m="${m##*/}"
+                            rm -f "$sys/$name/master"; rm -rf "$sys/$name/brport"
+                            [ -z "$m" ] || rm -f "$sys/$m/brif/$name"
+                            shift
+                            ;;
+                        type) shift 2 ;;
+                        stp_state) echo "$2" > "$sys/$name/bridge/stp_state"; shift 2 ;;
+                        *) shift ;;
+                    esac
+                done
+                ;;
+            *) echo "fake ip: unsupported: $cmd" >&2; exit 1 ;;
+        esac
+        ;;
+    addr|address)
+        sub="${1:-}"; shift || true
+        case "$sub" in
+            add|del)
+                cidr="$1"; dev="$3"
+                if [ ! -d "$sys/$dev" ]; then echo "Cannot find device \"$dev\"" >&2; exit 1; fi
+                touch "$sys/$dev/.addrs"
+                if [ "$sub" = "add" ]; then
+                    if grep -qxF -- "$cidr" "$sys/$dev/.addrs"; then echo "RTNETLINK answers: File exists" >&2; exit 2; fi
+                    echo "$cidr" >> "$sys/$dev/.addrs"
+                else
+                    if ! grep -qxF -- "$cidr" "$sys/$dev/.addrs"; then echo "RTNETLINK answers: Cannot assign requested address" >&2; exit 2; fi
+                    grep -vxF -- "$cidr" "$sys/$dev/.addrs" > "$sys/$dev/.addrs.new" || true
+                    mv -f "$sys/$dev/.addrs.new" "$sys/$dev/.addrs"
+                fi
+                ;;
+            show)
+                [ "${1:-}" = "dev" ] && shift
+                dev="$1"
+                if [ ! -d "$sys/$dev" ]; then echo "Device \"$dev\" does not exist." >&2; exit 1; fi
+                echo "5: $dev: <BROADCAST,MULTICAST,UP> mtu 1500"
+                if [ -f "$sys/$dev/.addrs" ]; then
+                    while IFS= read -r c; do echo "    inet $c scope global $dev"; done < "$sys/$dev/.addrs"
+                fi
+                ;;
+            *) echo "fake ip: unsupported: $cmd" >&2; exit 1 ;;
+        esac
+        ;;
+    neigh) cat "${HALOW_FAKE_NEIGH:-/dev/null}" ;;
+    *) echo "fake ip: unsupported: $cmd" >&2; exit 1 ;;
+esac
+exit 0

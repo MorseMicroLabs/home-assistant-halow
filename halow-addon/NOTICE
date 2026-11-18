@@ -1,0 +1,43 @@
+Morse Micro Wi-Fi HaLow Access Point for Home Assistant
+Copyright 2026 Morse Micro
+
+This product includes software developed at Morse Micro.
+
+License boundary
+
+1. Original application code. The application code written for this product
+   (the app's scripts, status page service, tests, tools, build scripts,
+   Dockerfile, configuration, translations, AppArmor profile, and
+   documentation) is licensed under the Apache License, Version 2.0. See the
+   file LICENSE and LICENSES/Apache-2.0.txt.
+
+2. Kernel modules. The Morse Micro driver modules (morse.ko and dot11ah.ko)
+   and the kernel components built with them are licensed under the GNU
+   General Public License, version 2 only (GPL-2.0-only), unchanged. They are
+   separate files that the Linux kernel loads. They are not part of the
+   Apache-2.0 application code. See LICENSES/GPL-2.0-only.txt.
+
+3. Firmware and board data. The chip firmware and board configuration files
+   are provided under the Morse Micro Binary Distribution License Agreement.
+   They are redistributed complete and unmodified, with the agreement. Its exact
+   text is in LICENSES/LicenseRef-Morse-Micro-Binary-Distribution-License-Agreement.txt.
+   They are not relicensed here.
+
+4. Other third-party components. The hostapd program built from the Morse
+   Micro hostap fork (BSD-3-Clause, with ISC-licensed files), the statically
+   linked libraries, the Alpine Linux packages, and the Home Assistant base
+   image components keep their own licenses. They are not relicensed here.
+   Each component, its license as recorded, and its verification status are
+   listed in PROVENANCE.md and provenance.psv, and summarized in
+   THIRD-PARTY-NOTICES.md. The license and notice texts are in LICENSES/ and
+   third-party-notices/. In the container image, all of these files are in
+   /usr/share/licenses/morse_micro_halow_ap/.
+
+5. Brand artwork. The Morse Micro icon mark and logo in icon.png and logo.png
+   are official Morse Micro brand assets used as supplied, governed by Morse
+   Micro trademark and brand usage terms, and are not licensed under the
+   Apache License, Version 2.0. See
+   LICENSES/LicenseRef-Morse-Micro-Brand-Assets.txt.
+
+Where the corresponding source for the GPL-2.0-only modules and other
+copyleft components is recorded is described in SOURCE-OFFER.md.

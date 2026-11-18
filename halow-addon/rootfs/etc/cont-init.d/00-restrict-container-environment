@@ -1,0 +1,61 @@
+#!/bin/bash
+# Restricts s6-overlay's container environment to its owner (root) before any service
+# starts.
+#
+# s6-overlay saves the container's environment, including the Supervisor token
+# (SUPERVISOR_TOKEN, HASSIO_TOKEN), as one file per variable in
+# /run/s6/container_environment, readable by every user (directory 0755, files 0644).
+# `with-contenv` reads it there for the root services. The status page server runs as an
+# unprivileged user and must never be able to read the token, so this script makes the
+# directory 0700 and every file in it 0600, owned by the user that runs it (root: s6-overlay
+# runs /etc/cont-init.d/* as root, in name order, after it has written the environment and
+# before it starts any service in /etc/services.d), and then verifies the result.
+#
+# Fail closed: if the directory is missing (for example S6_KEEP_ENV is set, so every process
+# would inherit the token), is a symbolic link, holds anything but plain files, or the modes
+# cannot be confirmed, the script exits non-zero. The base image sets
+# S6_BEHAVIOUR_IF_STAGE2_FAILS=2, so s6-overlay then stops the container before any service
+# (and before any host change) runs.
+#
+# Usage: 00-restrict-container-environment [<directory>]   (the argument exists for tests)
+set -o errexit -o nounset -o pipefail
+
+dir="${1:-/run/s6/container_environment}"
+
+_log() { printf 'cont-init: restrict-container-environment: %s\n' "$*" >&2; }
+_fail() { _log "ERROR: $*"; exit 1; }
+
+if [ -L "$dir" ] || [ ! -d "$dir" ]; then
+    _fail "$dir is missing or not a plain directory; the container environment (it holds the Supervisor token) cannot be protected"
+fi
+
+uid="$(id -u)"
+gid="$(id -g)"
+
+# The directory first, so nothing new in it is reachable while the files are changed.
+chown "$uid:$gid" "$dir" || _fail "cannot set the owner of $dir"
+chmod 0700 "$dir" || _fail "cannot set the mode of $dir"
+
+shopt -s nullglob dotglob
+count=0
+for f in "$dir"/*; do
+    if [ -L "$f" ] || [ ! -f "$f" ]; then
+        _fail "unexpected entry in $dir (not a plain file): ${f##*/}"
+    fi
+    chown "$uid:$gid" "$f" || _fail "cannot set the owner of ${f##*/}"
+    chmod 0600 "$f" || _fail "cannot set the mode of ${f##*/}"
+    count=$((count + 1))
+done
+
+# Verify from the file system itself, not from the exit codes above.
+if [ "$(stat -c '%a %u' "$dir")" != "700 $uid" ]; then
+    _fail "$dir is not mode 0700 owned by uid $uid after the change ($(stat -c '%a %u' "$dir"))"
+fi
+for f in "$dir"/*; do
+    if [ "$(stat -c '%a %u' "$f")" != "600 $uid" ]; then
+        _fail "${f##*/} is not mode 0600 owned by uid $uid after the change"
+    fi
+done
+
+_log "restricted $dir to uid $uid (directory 0700, $count files 0600)"
+exit 0

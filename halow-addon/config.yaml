@@ -1,0 +1,142 @@
+# Morse Micro Wi-Fi HaLow Access Point for Home Assistant: version 1.0.0, Stable.
+# Home Assistant Green with Home Assistant OS 18.4 and Australia only. See README.md.
+#
+# Reference: https://contributors.home-assistant.io/apps/reference/configuration/
+#
+# Why each grant (every one is used by the code in rootfs/ and was exercised on the target
+# device in live testing):
+#   kernel_modules         loads the radio driver modules (dot11ah, morse) and the host's
+#                          mac80211 dependency; mounts the host's /lib/modules read-only
+#                          for dependency resolution and the compatibility check, and adds
+#                          SYS_MODULE. The modules are unsigned and taint the host kernel.
+#   privileged SYS_ADMIN   only for two mounts inside the container's own mount namespace:
+#                          the bind remount of the container's /sys mount around the write
+#                          of the host firmware search path
+#                          (/sys/module/firmware_class/parameters/path), and the tmpfs the
+#                          manager mounts on /run/halow so the rendered access-point
+#                          configuration (with the passphrase) is memory-backed.
+#   privileged NET_ADMIN   the private bridge, interface addresses, the add-on's named
+#                          firewall chains (IPv4 and IPv6) and NAT.
+#   privileged NET_RAW     the DHCP server's and the access point's packet sockets. It is a
+#                          Docker default, listed explicitly so that a Supervisor running
+#                          with reduced capabilities never drops it (a listed capability
+#                          is never dropped). Listing it does not change the rating.
+#   host_network           the adapter's interfaces, the bridge, DHCP and NAT live in the
+#                          host network namespace.
+#   host_dbus              asks NetworkManager on the host to leave the radio's and the
+#                          bridge's interfaces unmanaged, and restores that afterwards.
+#                          The mount is the full system bus, read-only as a file system.
+#   apparmor: true         the shipped apparmor.txt profile replaces Docker's default
+#                          profile (which denies the /sys remount). The profile was loaded and
+#                          run in enforce mode on the target device in two live test sessions on
+#                          Home Assistant OS 18.3, with no denial caused by the app's own
+#                          operations. That is evidence from a small number of sessions on one
+#                          device, not a complete audit; see apparmor.txt. Home Assistant OS
+#                          18.4 is the supported release; no denial review on 18.4 is
+#                          recorded here. Re-confirm it on a real device after every software
+#                          update.
+# What no longer applies:
+#   udev                   removed. Nothing in the add-on uses the host's udev database or
+#                          writes udev rules; the adapter is found from sysfs.
+#   halow_interface        removed. The interface is derived from the adapter itself.
+#   apparmor: false        replaced by the shipped profile.
+# Not requested: full_access, devices/usb/uart/gpio, ports, homeassistant_api, hassio_api,
+# auth_api, a watchdog URL. The status page is served through Ingress only.
+#
+# Stop budget (see README.md, "Good to Know"): the Supervisor waits `timeout` seconds after
+# asking the add-on to stop before it kills the container. It must exceed the s6 service
+# grace time set in the Dockerfile (S6_SERVICES_GRACETIME) plus the s6 kill grace time, so
+# that the orderly rollback is never cut off by the Supervisor first.
+#
+# image: the prebuilt image the Supervisor pulls. It has no tag (the tag is the version) and no
+# {arch} placeholder, because the app supports one architecture (aarch64). The app cannot be
+# built from this repository alone: the kernel modules, firmware and hostapd binaries ship only
+# in the prebuilt image.
+name: Morse Micro Wi-Fi HaLow Access Point for Home Assistant
+version: "1.0.0"
+slug: morse_micro_halow_ap
+description: >
+  Turn your Home Assistant Green into a Wi-Fi HaLow access point with the Morse Micro
+  Wi-Fi HaLow USB Network Adapter.
+stage: stable
+image: ghcr.io/morsemicrolabs/home-assistant-halow
+arch:
+  - aarch64
+machine:
+  - green
+init: false
+startup: application
+boot: auto
+# Pre-release builds with these version strings saved options that are not compatible with
+# this app. The entries are inert for a fresh install, which has no earlier version to update
+# from; the list is kept unchanged.
+breaking_versions:
+  - "0.0.1-dev"
+  - "0.2.0-dev"
+timeout: 120
+kernel_modules: true
+privileged:
+  - SYS_ADMIN
+  - NET_ADMIN
+  - NET_RAW
+apparmor: true
+host_network: true
+host_dbus: true
+ingress: true
+ingress_port: 0
+panel_title: Wi-Fi HaLow
+panel_icon: mdi:access-point-network
+# The add-on's own markers and staged firmware under /data are host-state records for this
+# installation only; restoring them on another boot or system would describe changes that
+# do not exist there. The DHCP lease directory (halow_leases) holds the MAC and IP addresses
+# of the clients that hold a lease: it is kept across an add-on restart (so the status page
+# can still match devices to addresses) but is deliberately kept out of backups. The
+# options, including the passphrase, are stored by the Supervisor in
+# /data/options.json; that file is not excluded and is part of every backup of the add-on.
+backup_exclude:
+  - "halow_state"
+  - "halow_state/**"
+  - "halow_fw"
+  - "halow_fw/**"
+  - "halow_leases"
+  - "halow_leases/**"
+# Every option except the passphrase has a default, so every option is a required entry in
+# the schema and the Home Assistant form shows all of them from first installation (the
+# form hides unset optional "?" entries behind a switch). `channel` is a list whose default
+# "auto" means "no channel chosen": it is the only value that is valid for every bandwidth,
+# and the add-on ignores it in automatic mode (Home Assistant itself still refuses any value
+# outside the list, even in automatic mode); manual mode refuses it. The other values are the
+# union of the Australian IEEE 802.11-2024 channels of all four bandwidths (1 MHz: even
+# 28 to 50; 2 MHz: 29, 33, 37, 41, 45, 49; 4 MHz: 31, 39, 47; 8 MHz: 35, 43), which together
+# cover every number from 28 to 50; the add-on still checks the
+# channel against the selected bandwidth. `uplink_interface` is a string whose default is
+# empty (the interface of the default route is used). The passphrase has no default.
+# The order of the keys below is the order of the Home Assistant form: Home Assistant shows
+# the options in schema order and has no headings, so the form follows the customer's
+# sequence: network name and passphrase, region, bandwidth, channel selection mode, channel,
+# client addressing, then advanced networking. Do not reorder without updating
+# translations/en.yaml and tests/test_config_yaml.sh.
+options:
+  wifi_ssid: "Wi-Fi-HaLow"
+  region: "AU"
+  bandwidth: "1"
+  radio_mode: "automatic"
+  channel: "auto"
+  halow_subnet_cidr: "192.168.90.1/24"
+  dhcp_range_start: "192.168.90.50"
+  dhcp_range_end: "192.168.90.150"
+  uplink_interface: ""
+  allowed_ports: []
+schema:
+  wifi_ssid: "str(1,32)"
+  wifi_passphrase: "password(12,63)"
+  region: "list(AU)"
+  bandwidth: "list(1|2|4|8)"
+  radio_mode: "list(automatic|manual)"
+  channel: "list(auto|28|29|30|31|32|33|34|35|36|37|38|39|40|41|42|43|44|45|46|47|48|49|50)"
+  halow_subnet_cidr: "str"
+  dhcp_range_start: "str"
+  dhcp_range_end: "str"
+  uplink_interface: "str"
+  allowed_ports:
+    - "match(^(tcp|udp)/[0-9]{1,5}$)"

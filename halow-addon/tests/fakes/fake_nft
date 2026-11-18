@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Fake nft for the off-device tests: only `nft list chain <ip|ip6> filter <chain>`, answering
+# from the state of the fake iptables/ip6tables (fake_iptables) next to it. A built-in chain
+# whose $TDIR/absent.<chain> file exists is reported as the real nft does for a chain that
+# does not exist ("Error: No such file or directory", exit 1); a present one is printed in
+# nft's own layout, with one line per rule. HALOW_FAKE_NFT_FAIL=1 makes every call fail with
+# a permission error (the chain's state cannot be read).
+set -u
+DIR="${HALOW_FAKE_FW_DIR:?HALOW_FAKE_FW_DIR must be set}"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -n "${HALOW_FAKE_NFT_FAIL:-}" ]; then
+    echo "Error: Operation not permitted" >&2
+    exit 1
+fi
+[ "${1:-}" = "list" ] && [ "${2:-}" = "chain" ] || { echo "fake nft: unsupported: $*" >&2; exit 2; }
+case "${3:-}" in
+    ip) name=iptables ;;
+    ip6) name=ip6tables ;;
+    *) echo "fake nft: unsupported family: ${3:-}" >&2; exit 2 ;;
+esac
+table="${4:-}" chain="${5:-}"
+# Make sure the fake iptables has initialised its state for the table.
+HALOW_FAKE_FW_NOLOG=1 HALOW_FAKE_FW_NAME="$name" bash "$HERE/fake_iptables" -t "$table" -S >/dev/null 2>&1 || {
+    printf 'Error: No such file or directory\nlist chain %s %s %s\n' "${3:-}" "$table" "$chain" >&2
+    exit 1
+}
+tdir="$DIR/state/$name/$table"
+if [ -e "$tdir/absent.$chain" ] || [ ! -f "$tdir/rules.$chain" ]; then
+    printf 'Error: No such file or directory\nlist chain %s %s %s\n' "${3:-}" "$table" "$chain" >&2
+    exit 1
+fi
+printf 'table %s %s {\n\tchain %s {\n' "${3}" "$table" "$chain"
+case "$chain" in
+    INPUT) printf '\t\ttype filter hook input priority filter; policy %s;\n' "$(tr 'A-Z' 'a-z' < "$tdir/policy.$chain")" ;;
+    FORWARD) printf '\t\ttype filter hook forward priority filter; policy %s;\n' "$(tr 'A-Z' 'a-z' < "$tdir/policy.$chain")" ;;
+esac
+while IFS= read -r l; do printf '\t\t%s\n' "$l"; done < "$tdir/rules.$chain"
+printf '\t}\n}\n'
+exit 0

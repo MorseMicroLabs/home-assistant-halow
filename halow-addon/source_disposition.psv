@@ -1,0 +1,79 @@
+# Corresponding-source disposition of everything the product distributes in binary or data form.
+# One row per path of provenance.psv that is an artifact (a path starting with "./"), an embedded
+# third-party library ("embedded:"), or a group of image rows (the last two rows, which use a
+# trailing * as a wildcard). tests/test_sbom_completeness.sh requires that every such row of
+# provenance.psv resolves to a row here, with a valid disposition, and that a row named
+# source-recorded points at an id that exists in corresponding_source.psv.
+#
+# This file states what the records hold. It is not a legal conclusion. Which source the release
+# assets hold is stated in SOURCE-OFFER.md and source-assets/SOURCE-INDEX.md.
+#
+# disposition:
+#   source-recorded          corresponding_source.psv holds a row (named in the id field) that pins the
+#                            exact source revision or checksum and, where known, how it was built
+#   binary-only-no-source-record
+#                            a binary or data file supplied under its own licence agreement; no
+#                            source row exists and none is offered here
+#   source-asset             the corresponding source (or relink or build material) is a release asset of
+#                            version 1.0.0, named in the id field and listed with its checksum in
+#                            source-assets/ASSETS.psv
+#   upstream-reference-only  the component is described in provenance.psv by an upstream location,
+#                            version and checksum or commit; its license does not require source to be
+#                            provided with the binary, so no archive is included in the release assets
+#
+# path | disposition | id | notes
+./morse.ko | source-asset | morse-driver-source-2.1.0.tar.gz | driver source (with the rate-control code); build material in kernel-module-build-material-1.0.0.tar.xz, kernel-prep.sh, linux-6.18.58.tar.xz, haos-operating-system-18.4.tar.gz and buildroot-d2b75e05.tar.gz
+./dot11ah.ko | source-asset | morse-driver-source-2.1.0.tar.gz | driver source (with the rate-control code); build material in kernel-module-build-material-1.0.0.tar.xz, kernel-prep.sh, linux-6.18.58.tar.xz, haos-operating-system-18.4.tar.gz and buildroot-d2b75e05.tar.gz
+./hostapd_s1g | source-asset | hostap-source-2.1.0.tar.gz | hostap source; relink material in hostapd-relink-material-1.0.0.tar.xz; build script source-offer/build-hostapd.sh
+./hostapd_cli_s1g | source-asset | hostap-source-2.1.0.tar.gz | hostap source; relink material in hostapd-relink-material-1.0.0.tar.xz; build script source-offer/build-hostapd.sh
+./hostapd_s1g.conf | source-asset | hostap-source-2.1.0.tar.gz | configuration template from the same repository
+./mm8108b2-rl.bin | binary-only-no-source-record | none | chip firmware supplied under the licence agreement named in provenance.psv; no source row
+./bcf/bcf_boardtype_0807.bin | binary-only-no-source-record | none | board data file supplied under the licence agreement named in provenance.psv; no source row
+embedded:openssl | source-recorded | static-lib-openssl | statically linked into hostapd_s1g; Apache-2.0, so no archive is included; the release tarball and its checksum are pinned in source-offer/build-hostapd.sh
+embedded:glibc | source-asset | glibc-2.41-5dd252cf.tar.gz | statically linked into both executables; relink material in hostapd-relink-material-1.0.0.tar.xz
+embedded:libnl | source-asset | libnl-3.11.0.tar.gz | statically linked into hostapd_s1g; relink material in hostapd-relink-material-1.0.0.tar.xz
+embedded:libgcc | source-recorded | static-lib-libgcc | statically linked into the executables under the GCC Runtime Library Exception; no GCC 13.4.0 source in the assets (the Alpine gcc source for the base image libgcc is)
+embedded:mmrc | source-asset | morse-driver-source-2.1.0.tar.gz | compiled into morse.ko; the rate-control submodule is filled in inside the driver archive
+image-component:jemalloc | upstream-reference-only | none | shared library installed by the base image; its license (the text of COPYING, two numbered conditions and a disclaimer, equal to BSD-2-Clause in substance) does not require source; the upstream tag is named in provenance.psv
+image-component:* | upstream-reference-only | none | programs and files installed by the base image or by this add-on under permissive licenses (s6 family ISC, tempio Apache-2.0, bashio MIT) or data (the CA bundle, whose package source is in the Alpine asset, and pip.conf); upstream location named in provenance.psv; not separately included in the release assets
+image-package:alpine-baselayout | source-asset | alpine-3.23-copyleft-sources-1.0.0.tar | source is in the alpine-baselayout-3.7.2-r0 directory of the Alpine asset
+image-package:alpine-baselayout-data | source-asset | alpine-3.23-copyleft-sources-1.0.0.tar | source is in the alpine-baselayout-3.7.2-r0 directory of the Alpine asset
+image-package:apk-tools | source-asset | alpine-3.23-copyleft-sources-1.0.0.tar | source is in the apk-tools-3.0.8-r0 directory of the Alpine asset
+image-package:bash | source-asset | alpine-3.23-copyleft-sources-1.0.0.tar | source is in the bash-5.3.3-r1 directory of the Alpine asset
+image-package:bind-libs | source-asset | alpine-3.23-copyleft-sources-1.0.0.tar | source is in the bind-9.20.30-r0 directory of the Alpine asset
+image-package:bind-tools | source-asset | alpine-3.23-copyleft-sources-1.0.0.tar | source is in the bind-9.20.30-r0 directory of the Alpine asset
+image-package:busybox | source-asset | alpine-3.23-copyleft-sources-1.0.0.tar | source is in the busybox-1.37.0-r30 directory of the Alpine asset
+image-package:busybox-binsh | source-asset | alpine-3.23-copyleft-sources-1.0.0.tar | source is in the busybox-1.37.0-r30 directory of the Alpine asset
+image-package:ca-certificates | source-asset | alpine-3.23-copyleft-sources-1.0.0.tar | source is in the ca-certificates-20261020-r0 directory of the Alpine asset
+image-package:ca-certificates-bundle | source-asset | alpine-3.23-copyleft-sources-1.0.0.tar | source is in the ca-certificates-20261020-r0 directory of the Alpine asset
+image-package:dnsmasq | source-asset | alpine-3.23-copyleft-sources-1.0.0.tar | source is in the dnsmasq-2.91-r1 directory of the Alpine asset
+image-package:dnsmasq-common | source-asset | alpine-3.23-copyleft-sources-1.0.0.tar | source is in the dnsmasq-2.91-r1 directory of the Alpine asset
+image-package:gdbm | source-asset | alpine-3.23-copyleft-sources-1.0.0.tar | source is in the gdbm-1.26-r0 directory of the Alpine asset
+image-package:gmp | source-asset | alpine-3.23-copyleft-sources-1.0.0.tar | source is in the gmp-6.3.0-r4 directory of the Alpine asset
+image-package:iproute2 | source-asset | alpine-3.23-copyleft-sources-1.0.0.tar | source is in the iproute2-6.17.0-r0 directory of the Alpine asset
+image-package:iproute2-minimal | source-asset | alpine-3.23-copyleft-sources-1.0.0.tar | source is in the iproute2-6.17.0-r0 directory of the Alpine asset
+image-package:iproute2-ss | source-asset | alpine-3.23-copyleft-sources-1.0.0.tar | source is in the iproute2-6.17.0-r0 directory of the Alpine asset
+image-package:iproute2-tc | source-asset | alpine-3.23-copyleft-sources-1.0.0.tar | source is in the iproute2-6.17.0-r0 directory of the Alpine asset
+image-package:iptables | source-asset | alpine-3.23-copyleft-sources-1.0.0.tar | source is in the iptables-1.8.11-r1 directory of the Alpine asset
+image-package:keyutils-libs | source-asset | alpine-3.23-copyleft-sources-1.0.0.tar | source is in the keyutils-1.6.3-r4 directory of the Alpine asset
+image-package:kmod | source-asset | alpine-3.23-copyleft-sources-1.0.0.tar | source is in the kmod-34.2-r1 directory of the Alpine asset
+image-package:libapk | source-asset | alpine-3.23-copyleft-sources-1.0.0.tar | source is in the apk-tools-3.0.8-r0 directory of the Alpine asset
+image-package:libcom_err | source-asset | alpine-3.23-copyleft-sources-1.0.0.tar | source is in the e2fsprogs-1.47.3-r0 directory of the Alpine asset
+image-package:libelf | source-asset | alpine-3.23-copyleft-sources-1.0.0.tar | source is in the elfutils-0.194-r0 directory of the Alpine asset
+image-package:libgcc | source-asset | alpine-3.23-copyleft-sources-1.0.0.tar | source is in the gcc-15.2.0-r2 directory of the Alpine asset
+image-package:libidn2 | source-asset | alpine-3.23-copyleft-sources-1.0.0.tar | source is in the libidn2-2.3.8-r0 directory of the Alpine asset
+image-package:libmnl | source-asset | alpine-3.23-copyleft-sources-1.0.0.tar | source is in the libmnl-1.0.5-r2 directory of the Alpine asset
+image-package:libnftnl | source-asset | alpine-3.23-copyleft-sources-1.0.0.tar | source is in the libnftnl-1.3.0-r0 directory of the Alpine asset
+image-package:libstdc++ | source-asset | alpine-3.23-copyleft-sources-1.0.0.tar | source is in the gcc-15.2.0-r2 directory of the Alpine asset
+image-package:libunistring | source-asset | alpine-3.23-copyleft-sources-1.0.0.tar | source is in the libunistring-1.4.1-r0 directory of the Alpine asset
+image-package:libxtables | source-asset | alpine-3.23-copyleft-sources-1.0.0.tar | source is in the iptables-1.8.11-r1 directory of the Alpine asset
+image-package:musl | source-asset | alpine-3.23-copyleft-sources-1.0.0.tar | source is in the musl-1.2.5-r24 directory of the Alpine asset
+image-package:musl-utils | source-asset | alpine-3.23-copyleft-sources-1.0.0.tar | source is in the musl-1.2.5-r24 directory of the Alpine asset
+image-package:nftables | source-asset | alpine-3.23-copyleft-sources-1.0.0.tar | source is in the nftables-1.1.5-r2 directory of the Alpine asset
+image-package:readline | source-asset | alpine-3.23-copyleft-sources-1.0.0.tar | source is in the readline-8.3.1-r0 directory of the Alpine asset
+image-package:scanelf | source-asset | alpine-3.23-copyleft-sources-1.0.0.tar | source is in the pax-utils-1.3.8-r2 directory of the Alpine asset
+image-package:ssl_client | source-asset | alpine-3.23-copyleft-sources-1.0.0.tar | source is in the busybox-1.37.0-r30 directory of the Alpine asset
+image-package:userspace-rcu | source-asset | alpine-3.23-copyleft-sources-1.0.0.tar | source is in the userspace-rcu-0.15.3-r0 directory of the Alpine asset
+image-package:xz | source-asset | alpine-3.23-copyleft-sources-1.0.0.tar | source is in the xz-5.8.4-r0 directory of the Alpine asset
+image-package:xz-libs | source-asset | alpine-3.23-copyleft-sources-1.0.0.tar | source is in the xz-5.8.4-r0 directory of the Alpine asset
+image-package:* | upstream-reference-only | none | Alpine packages whose licenses do not require source to be provided with the binary (permissive licenses, or a permissive alternative is used); aports commit and package version recorded; not included in the release assets

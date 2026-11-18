@@ -1,0 +1,6 @@
+# Publication status of the corresponding-source release assets.
+# prepared: the assets exist, are verified locally and have deterministic addresses; they are NOT yet attached to a public release.
+# published: record exactly the two lines that tools/final_publication_check.sh prints after a full check from outside
+#   (status: published and manifest-sha256: <sha256 of ASSETS.psv>). Gate 14 checks the checksum against the current manifest.
+# This file is not copied into the image.
+status: prepared

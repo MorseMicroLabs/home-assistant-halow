@@ -1,0 +1,43 @@
+#!/bin/bash
+# Fake `bridge` (iproute2) for the bridge, backend and station tests. Records every call
+# and keeps the port-isolation flag in the fake sysfs tree HALOW_SYS_CLASS_NET_DIR.
+#
+# Controls (environment): HALOW_FAKE_LOG, HALOW_FAKE_FAIL, HALOW_FAKE_NOOP (as for the fake
+# `ip`, matched against "bridge <args>"), HALOW_FAKE_FDB (file printed by `bridge fdb show`).
+set -f
+sys="${HALOW_SYS_CLASS_NET_DIR:?}"
+cmd="bridge $*"
+printf '%s\n' "$cmd" >> "${HALOW_FAKE_LOG:-/dev/null}"
+
+_match() {
+    local list="$1" p IFS=';'
+    for p in $list; do
+        [ -n "$p" ] || continue
+        case "$cmd" in $p) return 0 ;; esac
+    done
+    return 1
+}
+if _match "${HALOW_FAKE_FAIL:-}"; then echo "fake bridge: injected failure: $cmd" >&2; exit 2; fi
+if _match "${HALOW_FAKE_NOOP:-}"; then exit 0; fi
+
+case "${1:-} ${2:-}" in
+    "link set")
+        shift 2
+        [ "${1:-}" = "dev" ] && shift
+        port="$1"; shift
+        if [ ! -L "$sys/$port/master" ]; then echo "fake bridge: $port is not a bridge port" >&2; exit 2; fi
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                isolated)
+                    case "$2" in on) v=1 ;; off) v=0 ;; *) exit 1 ;; esac
+                    mkdir -p "$sys/$port/brport"; echo "$v" > "$sys/$port/brport/isolated"
+                    shift 2
+                    ;;
+                *) shift ;;
+            esac
+        done
+        ;;
+    "fdb show") cat "${HALOW_FAKE_FDB:-/dev/null}" ;;
+    *) echo "fake bridge: unsupported: $cmd" >&2; exit 1 ;;
+esac
+exit 0

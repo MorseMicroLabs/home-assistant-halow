@@ -1,0 +1,96 @@
+# REUSE specification 3.x license mapping for this repository.
+#
+# It tells license scanners where the Apache-2.0 application code ends and where the
+# kernel modules and other third-party components begin, without adding license headers to
+# the source files. Later annotations take precedence over earlier ones, so the general
+# Apache-2.0 rule comes first and the specific exceptions follow it.
+#
+# Boundary (see NOTICE):
+#   Apache-2.0      the original application code, tests, tools, build scripts, configuration,
+#                   AppArmor profile, translations and documentation. This includes every file
+#                   under halow-addon/rootfs/ (the files that enter the container image).
+#   GPL-2.0-only    the kernel modules (morse.ko and dot11ah.ko) and the kernel configuration
+#                   recorded with them, unchanged and separate from the application code.
+#   BSD-3-Clause AND ISC
+#                   the hostapd programs and configuration template built from the Morse Micro
+#                   hostap fork (verified against the pinned upstream repository).
+#   LicenseRef-...  third-party artifacts that keep their own license as recorded in
+#                   halow-addon/provenance.psv. They are not relicensed. The exact texts are in
+#                   LICENSES/ (the Morse Micro Binary Distribution License Agreement, copied
+#                   verbatim from its pinned public source) and, for other third-party
+#                   components, in halow-addon/third-party-notices/.
+#                   The staged binaries under halow-addon/artifacts/ are not committed to the
+#                   repository (see halow-addon/.gitignore); the entries below describe them
+#                   for scanners that run on a tree where they have been staged.
+#
+# The mapping states licenses as recorded. It is not a legal conclusion.
+
+version = 1
+SPDX-PackageName = "Morse Micro Wi-Fi HaLow Access Point for Home Assistant"
+SPDX-PackageSupplier = "Organization: Morse Micro"
+SPDX-PackageDownloadLocation = "https://github.com/MorseMicroLabs/home-assistant-halow"
+
+[[annotations]]
+path = "**"
+precedence = "closest"
+SPDX-FileCopyrightText = "Copyright 2026 Morse Micro"
+SPDX-License-Identifier = "Apache-2.0"
+
+# The kernel configuration recorded with the module build is GPL-2.0-only, as
+# halow-addon/corresponding_source.psv records it.
+[[annotations]]
+path = "halow-addon/source-offer/kernel-6.18.58-haos.config"
+precedence = "closest"
+SPDX-FileCopyrightText = "Copyright holders as stated in the upstream source recorded in halow-addon/corresponding_source.psv"
+SPDX-License-Identifier = "GPL-2.0-only"
+
+# Kernel modules: GPL-2.0-only, unchanged.
+[[annotations]]
+path = "halow-addon/artifacts/**/*.ko"
+precedence = "closest"
+SPDX-FileCopyrightText = "Copyright holders as stated in the upstream source recorded in halow-addon/provenance.psv"
+SPDX-License-Identifier = "GPL-2.0-only"
+
+# Chip firmware and board data: Morse Micro Binary Distribution License Agreement.
+[[annotations]]
+path = ["halow-addon/artifacts/mm8108b2-rl.bin", "halow-addon/artifacts/bcf/**"]
+precedence = "closest"
+SPDX-FileCopyrightText = "Morse Micro"
+SPDX-License-Identifier = "LicenseRef-Morse-Micro-Binary-Distribution-License-Agreement"
+
+# hostapd program and control client built from the Morse Micro hostap fork, and the
+# configuration template derived from the fork's sample. The repository states the BSD
+# 3-clause license (README and COPYING at the pinned commit); the compiled set also includes
+# src/utils/radiotap.c, which is dual GPL-2.0 or ISC and is used under ISC, and ISC-licensed
+# header files. The statically linked libraries (OpenSSL, the C library, libnl, the GCC
+# runtime) keep their own licenses as recorded in halow-addon/provenance.psv.
+[[annotations]]
+path = ["halow-addon/artifacts/hostapd_s1g", "halow-addon/artifacts/hostapd_cli_s1g"]
+precedence = "closest"
+SPDX-FileCopyrightText = "Copyright holders as stated in the upstream source recorded in halow-addon/provenance.psv"
+SPDX-License-Identifier = "BSD-3-Clause AND ISC"
+
+# The configuration template: the fork's sample file, BSD-3-Clause at repository level (its own
+# header carries only a copyright line).
+[[annotations]]
+path = "halow-addon/artifacts/hostapd_s1g.conf"
+precedence = "closest"
+SPDX-FileCopyrightText = "Copyright holders as stated in the upstream source recorded in halow-addon/provenance.psv"
+SPDX-License-Identifier = "BSD-3-Clause"
+
+# Home Assistant app presentation images (icon.png, logo.png): official Morse Micro brand
+# artwork (Mu icon mark and primary horizontal logo, black versions) used as supplied, only
+# resampled to the sizes Home Assistant recommends. Approved for publication unchanged. They
+# are NOT licensed under Apache-2.0; see LICENSES/LicenseRef-Morse-Micro-Brand-Assets.txt.
+[[annotations]]
+path = ["halow-addon/icon.png", "halow-addon/logo.png"]
+precedence = "closest"
+SPDX-FileCopyrightText = "Morse Micro"
+SPDX-License-Identifier = "LicenseRef-Morse-Micro-Brand-Assets"
+
+# Verbatim license and notice texts of third-party components, copied into the image.
+[[annotations]]
+path = "halow-addon/third-party-notices/**"
+precedence = "closest"
+SPDX-FileCopyrightText = "Copyright holders as stated in each file"
+SPDX-License-Identifier = "LicenseRef-Third-Party-License-Texts"

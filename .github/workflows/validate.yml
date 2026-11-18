@@ -1,0 +1,74 @@
+# Static validation of the Home Assistant app in this repository.
+#
+# SCOPE (read this before extending the workflow)
+#   This workflow runs ONLY the test suites that work on a clean checkout. It does NOT
+#   build, verify or publish the container image. A clean checkout cannot build the image:
+#   the Dockerfile copies halow-addon/artifacts/ (kernel modules, firmware, board data,
+#   hostapd binaries), and that directory is git-ignored and is not in Git. The release image
+#   is built locally from a separately built, checksum-verified artifact bundle, then pushed
+#   by a maintainer. See halow-addon/docs/LOCAL-IMAGE-BUILD.md for that procedure.
+#
+#   Suites that need the staged artifacts or a built image print SKIPPED (exit 77) or skip
+#   their artifact assertions. A skip is NOT a pass. The final step lists what was skipped
+#   so a green run is never read as "the image was verified".
+name: validate
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-tests:
+    name: Static test suites (clean checkout, no image)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install the YAML module the config checks use
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends python3-yaml
+
+      - name: Run the test suites that need no artifacts and no image
+        working-directory: halow-addon
+        shell: bash
+        run: |
+          set -o pipefail
+          # HALOW_REQUIRE_REAL is deliberately NOT set: suites that need the built image or
+          # the staged binaries skip, and run_tests.sh lists them at the end.
+          bash tests/run_tests.sh 2>&1 | tee "$RUNNER_TEMP/run_tests.log"
+
+      - name: State what this run did not verify
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "### Static validation only"
+            echo
+            echo "The container image was not built or verified by this workflow, and nothing was published."
+            echo "The staged artifact bundle is not in Git, so image-dependent suites did not run."
+            echo
+            echo '```'
+            grep -E 'skipped|SKIPPED|assertions skipped|^ALL [0-9]+ test suites passed|suites FAILED' "$RUNNER_TEMP/run_tests.log" | sort -u || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+# IMAGE PUBLICATION: deliberately absent.
+#   No job here can honestly build or push the image, because the required artifact bundle is
+#   not in Git and there is no hosted copy of it that this workflow could fetch. A
+#   workflow_dispatch job that accepted a "bundle" input would have to pull an unreviewed
+#   binary from somewhere, which this project does not do. Publication is a maintainer
+#   action performed locally and verified against the registry; see halow-addon/docs/LOCAL-IMAGE-BUILD.md.
+#   If a bundle is ever hosted with a published checksum, add a manual job then, with
+#   `packages: write` scoped to that job only, and verify the pushed digest.

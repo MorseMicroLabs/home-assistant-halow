@@ -1,0 +1,9 @@
+# Staged binary artifacts, copied from the verified artifact bundle by build.sh. They are
+# regenerable, not reviewable as a diff (kernel modules, vendor firmware and BCF files,
+# locally built tool binaries), and their licences differ — see PROVENANCE.md before any
+# of them is redistributed. Regenerate with ./build.sh.
+artifacts/
+legal-stage/
+MANIFEST.sha256.actual
+__pycache__/
+*.pyc

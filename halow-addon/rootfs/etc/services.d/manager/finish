@@ -1,0 +1,61 @@
+#!/usr/bin/with-contenv bashio
+# shellcheck shell=bash
+# HaLow access point — finish hook of the manager service.
+#
+# Runs as a separate process after every exit of the manager (s6 passes the exit code,
+# 256 when the manager was killed by a signal, and the signal number). It shares no shell
+# state with the manager: it re-derives everything from the durable ownership records and
+# from the host, and repeats the rollback. A rollback that cannot be confirmed persists the
+# refusal, so the next manager start retries only the rollback.
+#
+# Crash-loop bound: every exit other than a clean stop is counted in the volatile run
+# directory (a container recreation resets it). After HALOW_MANAGER_EXIT_LIMIT such exits
+# within HALOW_MANAGER_EXIT_WINDOW_S seconds the container is halted with the exit code
+# (the Supervisor's own restart policy then applies); below the bound s6 restarts the
+# manager, which reconciles first.
+
+HALOW_LIB_DIR="${HALOW_LIB_DIR:-/usr/lib/halow}"
+# shellcheck source=/dev/null
+. "${HALOW_LIB_DIR}/libs.sh"
+if ! halow_source_all_libs "$HALOW_LIB_DIR"; then
+    halow_log_error "manager finish: required libraries are missing from this build: ${HALOW_LIBS_MISSING}"
+fi
+
+APP_EXIT_CODE="${1:-0}"
+case "$APP_EXIT_CODE" in ''|*[!0-9]*) APP_EXIT_CODE=1 ;; esac
+: "${HALOW_S6_RESULTS_FILE:=/run/s6-linux-init-container-results/exitcode}"
+: "${HALOW_S6_HALT:=/run/s6/basedir/bin/halt}"
+
+# The same backend the manager registered; the contract is the only way rollback reaches it.
+if ! halow_backend_register_default; then
+    halow_log_error "manager finish: could not register the networking backend; its teardown cannot run from here"
+fi
+
+ROLLBACK_OK=0
+if halow_rollback; then
+    ROLLBACK_OK=0
+else
+    ROLLBACK_OK=1
+    halow_log_error "manager finish: rollback did not fully complete — see the rollback: INCOMPLETE line above for exactly what remains"
+    halow_refusal_set ROLLBACK_INCOMPLETE || true
+fi
+
+HALT_CODE=""
+if HALT_CODE="$(halow_finish_decide "$ROLLBACK_OK" "$APP_EXIT_CODE")"; then
+    if [ "$APP_EXIT_CODE" -eq 0 ]; then
+        halow_restart_count_reset
+        halow_log_info "manager finished cleanly"
+        exit 0
+    fi
+    HALT_CODE=1
+fi
+
+halow_restart_count_incr "$(date +%s)" || halow_log_warning "manager finish: the exit could not be counted"
+EXITS="$(halow_restart_count_get "$(date +%s)")"
+if [ "$EXITS" -ge "$HALOW_MANAGER_EXIT_LIMIT" ]; then
+    halow_log_error "manager finish: the manager exited $EXITS times within ${HALOW_MANAGER_EXIT_WINDOW_S}s (last exit code $APP_EXIT_CODE, rollback ok: $([ "$ROLLBACK_OK" -eq 0 ] && echo yes || echo no)); halting the add-on with exit code ${HALT_CODE}"
+    echo "${HALT_CODE}" > "$HALOW_S6_RESULTS_FILE"
+    exec "$HALOW_S6_HALT"
+fi
+halow_log_warning "manager finish: the manager exited (code $APP_EXIT_CODE; exit $EXITS of $HALOW_MANAGER_EXIT_LIMIT within ${HALOW_MANAGER_EXIT_WINDOW_S}s); it will be restarted and will reconcile first"
+exit 0

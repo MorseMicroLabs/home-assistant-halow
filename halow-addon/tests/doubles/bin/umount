@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Fake umount: removes the topmost mount of exactly the named disable_ipv6 file.
+. "$(dirname "$0")/_mntlib.sh"
+path="${1:-}"
+fm_log "umount $path"
+if [ "$#" -ne 1 ] || ! fm_path_ok "$path"; then fm_log "VIOLATION umount $*"; exit 32; fi
+fm_fail umount && exit 32
+lines=(); idx=-1; i=0
+while IFS= read -r l; do lines+=("$l"); [ "${l%|*}" = "$path" ] && idx=$i; i=$((i + 1)); done < "$FM_STACK"
+[ "$idx" -ge 0 ] || exit 32
+unset 'lines[idx]'
+if [ "${#lines[@]}" -gt 0 ]; then printf '%s\n' "${lines[@]}" > "$FM_STACK"; else : > "$FM_STACK"; fi
+fm_render
+exit 0

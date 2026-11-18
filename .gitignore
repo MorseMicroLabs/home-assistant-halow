@@ -1,0 +1,8 @@
+# Staged binary artifacts (kernel modules, firmware and board data, hostapd binaries). They are
+# copied from the verified artifact bundle by halow-addon/build.sh and are not committed.
+halow-addon/artifacts/
+halow-addon/legal-stage/
+# Test and build leftovers
+MANIFEST.sha256.actual
+__pycache__/
+*.pyc

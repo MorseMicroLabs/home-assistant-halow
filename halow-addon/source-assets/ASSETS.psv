@@ -1,0 +1,18 @@
+# Corresponding-source release assets of version 1.0.0 (published as assets of the release v1.0.0).
+# One row per asset; pipe-delimited. The address of an asset is url_base plus its name.
+# name | size | sha256 | covers | licenses | member | kind | note
+# member: a path that must be inside an archive asset ("-" for a plain file). kind: tar.gz, tar.xz, tar or text.
+# SHA256SUMS is also an asset; it holds the checksums of every row below and is generated from them.
+# url_base: https://github.com/MorseMicroLabs/home-assistant-halow/releases/download/v1.0.0/
+morse-driver-source-2.1.0.tar.gz | 537404 | 9e5b5d8e7cb6a31e63c9550ce32692871006ba8d2d0df3705467610ab391027d | morse.ko dot11ah.ko | GPL-2.0-only | morse-driver-2.1.0/Makefile | tar.gz | driver commit 4ce0a027 with rate-control submodule 24f6c69d
+kernel-module-build-material-1.0.0.tar.xz | 351600 | edb6971e0a2f9aa3a71eb74763589fa33f25a7070cd853209222391f6f27b4b7 | morse.ko dot11ah.ko | GPL-2.0-only and upstream file licenses | kernel-module-build-material-1.0.0/kernel/Module.symvers | tar.xz | kernel config, Module.symvers, patches, configurations, scripts, log
+kernel-prep.sh | 7882 | 2e4503a7b41242505ce245124f9edea8dbbca6758a8b5f5ab885412062a561e3 | morse.ko dot11ah.ko | Apache-2.0 | - | text | same bytes as source-offer/kernel-prep.sh
+linux-6.18.58.tar.xz | 154851680 | 069b19f9032c4dac8149ae4b6520c35debca0f42a9f6d52ee55ba6ca9b818013 | kernel for the modules | GPL-2.0-only | linux-6.18.58/COPYING | tar.xz | upstream bytes
+haos-operating-system-18.4.tar.gz | 342411 | 7d9f23cfe96e88a2d3aeb9cde33cb0f7005c3a343a11db05b54e231c886b85cd | kernel patches and configuration | Apache-2.0 and parts | operating-system-18.4/LICENSE | tar.gz | upstream GitHub archive of tag 18.4
+buildroot-d2b75e05.tar.gz | 7128462 | 9431a731f9272bfcf35bd27a3a6c3e78c4828b1cc42cff758c5abdcc146ae1ad | toolchain | GPL-2.0-or-later | buildroot-d2b75e05/COPYING | tar.gz | commit d2b75e05
+hostap-source-2.1.0.tar.gz | 5472862 | 65827b4e5fed9944d0e70989440b771125a1290f740e7489fe6367dcc651e7e5 | hostapd_s1g hostapd_cli_s1g | BSD-3-Clause AND ISC | hostap-2.1.0/README | tar.gz | commit e7309b43
+hostapd-relink-material-1.0.0.tar.xz | 6972416 | bdc0090e2177db37191604e9adc8cc81c50e8bdb386c6940d93225d4ecf77612 | hostapd_s1g hostapd_cli_s1g | LGPL-2.1 and others | hostapd-relink-material-1.0.0/relink.sh | tar.xz | objects, static libraries, link commands
+libnl-3.11.0.tar.gz | 1124072 | 2a56e1edefa3e68a7c00879496736fdbf62fc94ed3232c0baba127ecfa76874d | static libnl | LGPL-2.1-only | libnl-3.11.0/COPYING | tar.gz | upstream bytes
+glibc-2.41-5dd252cf.tar.gz | 38755440 | 987c4f5951a25dbdcc0b76deddf4fcb97a122cc4f505d351fd44863936e7d903 | static glibc | LGPL-2.1-or-later | glibc-2.41-161-g5dd252cf1d113644b3679f5a158e9ef20217865e/COPYING.LIB | tar.gz | commit 5dd252cf as the toolchain build used it
+alpine-3.23-copyleft-sources-1.0.0.tar | 164392960 | fa298763ebc177c98102ea7896af2b09e8d5fe2699aedf3cd940587066747195 | Alpine packages that require source | GPL LGPL MPL per origin | INDEX.tsv | tar | build files, patches, upstream archives per origin
+SOURCE-INDEX.md | 5110 | 4d86517ec69815ddb7ffe344e2ab2594a61104863f4f94760e7fa3b8d651ffa5 | index | none | - | text | same bytes as source-assets/SOURCE-INDEX.md

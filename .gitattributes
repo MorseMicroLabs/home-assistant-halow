@@ -1,0 +1,18 @@
+# Auto detect text files and perform LF normalization
+* text=auto
+# Shell scripts and everything that enters the container image or runs in it must stay LF
+*.sh text eol=lf
+halow-addon/rootfs/** text eol=lf
+halow-addon/tests/** text eol=lf
+halow-addon/tools/** text eol=lf
+halow-addon/source-offer/** text eol=lf
+halow-addon/Dockerfile text eol=lf
+halow-addon/.dockerignore text eol=lf
+*.psv text eol=lf
+halow-addon/MANIFEST.sha256 text eol=lf
+# Official brand artwork: binary, never normalized.
+*.png binary
+# Verbatim license and notice texts: stored and checked out byte for byte (LF).
+LICENSES/** text eol=lf
+halow-addon/LICENSES/** text eol=lf
+halow-addon/third-party-notices/** text eol=lf

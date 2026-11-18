@@ -1,0 +1,5 @@
+The files in halow-addon/third-party-notices/ are verbatim copies of the license
+and notice texts that the owners of third-party components published with those
+components. Each remains the property of its owner and applies to the component it
+names, under the terms stated in the file. They are not part of the Apache-2.0
+application code and are not relicensed here.

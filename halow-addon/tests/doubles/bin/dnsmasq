@@ -1,0 +1,13 @@
+#!/bin/bash
+# Fake `dnsmasq`: a real, long-lived process whose kernel name is "dnsmasq" and whose
+# command line carries the arguments it was given, so the add-on's real identity checks
+# (/proc/<pid>/comm and cmdline) recognise it. It records its start and stops on SIGTERM.
+#   HALOW_FAKE_LOG               file the start is appended to
+#   HALOW_FAKE_DNSMASQ_EXIT      exit at once with this code (a failed start)
+#   HALOW_FAKE_DNSMASQ_LIFETIME  exit by itself after this many seconds (a crash)
+printf 'dnsmasq %s\n' "$*" >> "${HALOW_FAKE_LOG:-/dev/null}"
+if [ -n "${HALOW_FAKE_DNSMASQ_EXIT:-}" ]; then exit "$HALOW_FAKE_DNSMASQ_EXIT"; fi
+trap 'exit 0' TERM
+end=$(( SECONDS + ${HALOW_FAKE_DNSMASQ_LIFETIME:-3600} ))
+while [ "$SECONDS" -lt "$end" ]; do /bin/sleep 0.1; done
+exit 1

@@ -1,0 +1,14 @@
+# The image is built from exactly these inputs; everything else (tests, documents, the
+# corresponding-source record, scratch files) stays out of the build context.
+*
+!Dockerfile
+!MANIFEST.sha256
+!artifacts/
+!rootfs/
+**/*.actual
+**/__pycache__
+**/*.pyc
+# The license files that go into the image (see the Dockerfile), gathered by build.sh into
+# legal-stage/: the application license, the notice, the third-party notice summary, the
+# source record, the build scripts it names and the license texts.
+!legal-stage/

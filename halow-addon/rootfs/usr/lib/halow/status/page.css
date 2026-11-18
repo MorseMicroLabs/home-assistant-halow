@@ -1,0 +1,95 @@
+:root {
+  color-scheme: light dark;
+  --bg: #f6f7f9;
+  --fg: #1c1f24;
+  --muted: #5b6370;
+  --card: #ffffff;
+  --border: #d9dde3;
+  --ok: #1b7f3b;
+  --ok-bg: #e3f4e8;
+  --warn: #8a5300;
+  --warn-bg: #fff3d6;
+  --warn-border: #e0a526;
+  --bad: #a3221a;
+  --bad-bg: #fde7e5;
+  --bad-border: #d9534a;
+  --info: #2a5db0;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15171b;
+    --fg: #e7e9ec;
+    --muted: #a4abb6;
+    --card: #1f2227;
+    --border: #353a42;
+    --ok: #6fd391;
+    --ok-bg: #173323;
+    --warn: #f2c46b;
+    --warn-bg: #3a2c0e;
+    --warn-border: #b98316;
+    --bad: #ff8f86;
+    --bad-bg: #401a17;
+    --bad-border: #c4463d;
+    --info: #8db4f2;
+  }
+}
+[hidden] { display: none !important; }
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 16px;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.45;
+}
+main { max-width: 860px; margin: 0 auto; }
+h1 { font-size: 1.4rem; margin: 0; }
+h2 { font-size: 1.1rem; margin: 0 0 8px; }
+h3 { font-size: 0.95rem; margin: 14px 0 6px; color: var(--muted); font-weight: 600; }
+.top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 14px; }
+.state { margin: 0; padding: 4px 12px; border-radius: 999px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; }
+.state .dot { width: 10px; height: 10px; border-radius: 50%; background: currentColor; display: inline-block; }
+.state-operating { color: var(--ok); background: var(--ok-bg); }
+.state-starting { color: var(--info); background: var(--card); border: 1px solid var(--border); }
+.state-attention { color: var(--bad); background: var(--bad-bg); }
+.card, .banner { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin: 0 0 14px; }
+.card-attention { border-color: var(--bad-border); border-left-width: 6px; }
+.card-attention .summary { font-weight: 600; }
+.banner { display: block; }
+.banner-advisory { background: var(--warn-bg); border-color: var(--warn-border); border-left-width: 6px; color: var(--fg); }
+.banner-advisory h2 { color: var(--warn); }
+.banner-stale { background: var(--bad-bg); border-color: var(--bad-border); border-left-width: 6px; }
+.banner-stale h2 { color: var(--bad); }
+p { margin: 6px 0; }
+dl { display: grid; grid-template-columns: minmax(140px, max-content) 1fr; gap: 4px 16px; margin: 6px 0; }
+dt { color: var(--muted); }
+dd { margin: 0; overflow-wrap: anywhere; }
+.note, .meta { color: var(--muted); font-size: 0.9rem; }
+.detail { overflow-wrap: anywhere; }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 0.9rem; }
+.mono { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; overflow-wrap: anywhere; }
+.pill { padding: 1px 8px; border-radius: 999px; font-size: 0.85rem; font-weight: 600; }
+.pill-on { color: var(--ok); background: var(--ok-bg); }
+.pill-off { color: var(--muted); border: 1px solid var(--border); }
+.devs { margin: 0; padding-left: 1.1rem; }
+.devs li { margin: 0 0 4px; overflow-wrap: anywhere; }
+footer { margin-top: 18px; text-align: center; }
+.devbuild { font-weight: 700; color: var(--warn); }
+a { color: var(--info); }
+@media (max-width: 520px) {
+  body { padding: 10px; }
+  dl { grid-template-columns: 1fr; gap: 0; }
+  dd { margin-bottom: 6px; }
+  /* Connected devices: one stacked record per device, labels from data-label. */
+  .table-wrap { overflow-x: visible; }
+  table, tbody, tr, td { display: block; }
+  thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  tr { padding: 6px 0; border-bottom: 1px solid var(--border); }
+  td { border-bottom: 0; padding: 3px 8px; }
+  td::before { content: attr(data-label); display: block; color: var(--muted); font-size: 0.85rem; font-weight: 600; }
+}

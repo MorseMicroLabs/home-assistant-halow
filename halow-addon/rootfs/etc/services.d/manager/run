@@ -1,0 +1,21 @@
+#!/usr/bin/with-contenv bashio
+# shellcheck shell=bash
+# HaLow access point — the manager service.
+#
+# The manager is the only writer of host state and of the status snapshot. It runs the
+# start sequence, supervises the access point and networking, stays up in "attention
+# required" when something is wrong, and on the stop signal rolls back what it changed:
+# exit 0 when the rollback is confirmed, 1 otherwise. The signal handler only records the
+# stop request; the manager acts on it at its own check points (never inside the handler).
+# The separate finish hook repeats the rollback from durable state after every exit.
+
+HALOW_LIB_DIR="${HALOW_LIB_DIR:-/usr/lib/halow}"
+# shellcheck source=/dev/null
+. "${HALOW_LIB_DIR}/libs.sh"
+if ! halow_source_all_libs "$HALOW_LIB_DIR"; then
+    halow_log_error "manager: required libraries are missing from this build: ${HALOW_LIBS_MISSING}"
+fi
+
+trap 'halow_manager_on_stop' TERM INT
+
+halow_manager_main

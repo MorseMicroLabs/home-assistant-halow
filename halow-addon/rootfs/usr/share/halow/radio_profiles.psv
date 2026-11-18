@@ -1,0 +1,101 @@
+# Radio profile table for the HaLow access point add-on (pipe-separated values).
+#
+# Read by rootfs/usr/lib/halow/radio.sh. Lines starting with '#' and blank lines are
+# ignored. Every value below is derived from the pinned upstream sources named in the
+# comments; nothing here has been validated on the target device unless its state says
+# live-validated (none does in this build).
+#
+# Pinned sources:
+#   driver  = MorseMicro/morse_driver @ 4ce0a0272f8ac8e2fa58eea8ff08116e493399de
+#   hostap  = MorseMicro/hostap       @ e7309b438eaec4b82f2db29e8ef7beaca3ca52c6 (tag mm8108-2.1.0)
+#
+# Key: (adapter identity, region). The adapter identity is "<usb vendor>:<usb product>".
+#
+# Row kinds and columns (fixed positions):
+#
+# region|<adapter>|<region>|<country_code>|<scheme>|<hw_mode>|<ieee80211ah>|<freq_start_khz>|<chan_sep_khz>|<beacon_int>|<dtim_period>|<s1g_capab>
+#   scheme         channelisation scheme number given to the dot11ah module
+#                  (driver dot11ah/dot11ah.h: CHANNELIZATION_SCHEME_IEEE80211_2024 = 2)
+#   freq_start_khz / chan_sep_khz
+#                  centre frequency = freq_start_khz + chan_sep_khz x channel
+#                  (hostap src/utils/morse.c: ah_class .s1g_freq_start and S1G_CHAN_SEP_KHZ)
+#
+# width|<adapter>|<region>|<bandwidth_mhz>|<op_class>|<state>|<s1g_prim_chwidth>|<s1g_prim_1mhz_chan_index>|<fallback_channel>|<fallback_state>|<channel:frequency_khz ...>
+#   state          implemented | live-validated (live evidence on the target device only)
+#   s1g_prim_chwidth
+#                  hostapd configuration value: 0 = 1 MHz primary, 1 = 2 MHz primary
+#                  (hostap src/ap/hostapd.h enum s1g_prim_chwidth)
+#   fallback_state candidate | live-validated
+#
+# ---------------------------------------------------------------------------------------
+# AU, IEEE 802.11-2024 channelisation (scheme 2). This is the only channelisation scheme
+# the product supports; a channel number is meaningful only within one scheme, so this
+# table must not be mixed with the channel numbers of another scheme.
+#
+# Scheme: the driver names scheme 2 "Channelization per IEEE Std 802.11-2024"
+#   (dot11ah/dot11ah.h; dot11ah/reg.c prints it as "IEEE802.11-2024") and selects the AU
+#   2024 channel table, au_2024_s1g_channels[] in dot11ah/s1g_channels_rules.c, and the
+#   AU 2024 regulatory rules au_2024_reg_rules[] in dot11ah/reg_rules.c, when the module
+#   is loaded with channelization_scheme=2.
+# Operating classes: hostap src/utils/morse.c ah_class au22 (global class 50, 1 MHz),
+#   au23 (51, 2 MHz), au24 (52, 4 MHz) and au25 (53, 8 MHz), all with .s1g_freq_start =
+#   902000 and the "AU" country code; they are the AU rows of s1g_op_classes_2024[]. The
+#   operating class is given to hostapd as the global class (50..53); hostapd derives the
+#   operating width from it (morse_s1g_op_class_to_ch_width()).
+# Note on hostapd's own channelisation bookkeeping: while it parses the configuration,
+#   hostapd's AP path (morse_ap_configure_channelization(), called from
+#   hostapd_config_s1g_val()) maps the AU global operating classes 48..53 to the scheme it
+#   records as CHANNELIZATION_SCHEME_IEEE80211_REVMF, and has no operating-class value
+#   that selects its 2024 data. When the access point starts, morse_set_interface() asks
+#   the driver for its scheme (a Morse nl80211 vendor-command query; the access point
+#   does not start if the query fails) and, when it differs from the recorded one,
+#   switches hostapd to the driver's scheme, so hostapd then uses its 2024 operating-class
+#   list and channel table. Either way the result for these channels is the same: the
+#   REVmf and 2024 channel-to-HT-channel tables in morse.c (s1g_ht_chan_pairs_au and
+#   s1g_ht_chan_pairs_au_2024) differ only for channels 51, 55 and 59, the AU operating
+#   classes 22..25 are the same entries in both operating-class lists, and the HT20
+#   offset logic (morse_ht_chan_offset_au()) differs only from the 2020 scheme. The
+#   driver, loaded with scheme 2, uses its own 2024 table for the same channels. Channels
+#   51, 55 and 59 exist only in the REVmf data; they are not in the 2024 scheme and are
+#   not listed here. Only the configuration-parse step is exercised off-device; the
+#   start-time query and switch need the driver and firmware, so they are live-only.
+# hw_mode=a, ieee80211ah=1, beacon_int=100, dtim_period=2, s1g_capab=[SHORT-GI-ALL]:
+#   the bundled hostapd_s1g.conf template (the configuration that ran on the target
+#   device at 1 MHz, under the 2020 scheme, which this product no longer uses).
+# freq_start 902000 kHz, separation 500 kHz: hostap src/utils/morse.c au22..au25
+#   (.s1g_freq_start = 902000) and S1G_CHAN_SEP_KHZ (500).
+region|325b:8100|AU|AU|2|a|1|902000|500|100|2|[SHORT-GI-ALL]
+#
+# Channel sets and frequencies: driver dot11ah/s1g_channels_rules.c au_2024_s1g_channels[]
+#   (CHANS1GHZ(channel, MHz, kHz offset, width, ...)), identical to the channel sets of the
+#   hostap classes au22..au25: 1 MHz 28..50 even, 2 MHz 29, 33, 37, 41, 45, 49, 4 MHz 31,
+#   39, 47, 8 MHz 35, 43. Frequencies are 902000 + 500 x channel kHz and agree with the
+#   driver table (for example channel 35 = 919 MHz + 500 kHz). They are cross-checked
+#   against the driver regulatory rules dot11ah/reg_rules.c au_2024_reg_rules[]: the
+#   actual-frequency rules are 915.5-923.5 MHz and 919.5-927.5 MHz, each allowing up to
+#   8 MHz, and every channel below, taken as the span of its centre frequency plus or
+#   minus half its width, lies inside one of them (1 MHz channel 28 spans 915.5-916.5 MHz;
+#   8 MHz channel 35 spans 915.5-923.5 MHz and 43 spans 919.5-927.5 MHz).
+# Primary channel: 1 MHz primary (s1g_prim_chwidth=0), 1 MHz primary index 0 for every
+#   width. Valid for every width under hostap morse_check_valid_s1g_prim_1Mhz_chan_index()
+#   (index <= width - 1) and hostapd_config_s1g_val() (primary width <= operating width).
+#   Index 0 is the lowest 1 MHz sub-channel; for the AU channels (all <= 50) the driver
+#   (calculate_primary_s1g_channel_default(), used by calculate_primary_s1g_channel_au()
+#   for centre channels <= 50) gives primary = centre - 1 (2 MHz), centre - 3 (4 MHz) and
+#   centre - 7 (8 MHz): 2 MHz 29/33/37/41/45/49 -> 28/32/36/40/44/48, 4 MHz 31/39/47 ->
+#   28/36/44, 8 MHz 35/43 -> 28/36. Each of these is a channel of the 1 MHz set above and
+#   lies inside a regulatory rule allowing at least 1 MHz. The 5 GHz equivalents used by
+#   the stack (morse_ht_chan_offset_au(): the +48 adjustment applies to operating channel
+#   43 with a primary below 43) stay inside the mapped 5 GHz blocks of au_2024_reg_rules[].
+#   These primary settings are a conservative engineering choice; for every width they
+#   await live validation under this scheme.
+# Fallback candidates (all unvalidated): the channel whose centre frequency is nearest to
+#   923.5 MHz (the band segment of the earlier 1 MHz run, which used another scheme and so
+#   proves nothing here), the lower channel on a tie:
+#   1 MHz ch 42 (923.0 MHz), 2 MHz ch 41 (922.5 MHz, spans 921.5-923.5 MHz),
+#   4 MHz ch 39 (921.5 MHz, spans 919.5-923.5 MHz), 8 MHz ch 43 (923.5 MHz, spans
+#   919.5-927.5 MHz).
+width|325b:8100|AU|1|50|implemented|0|0|42|candidate|28:916000 30:917000 32:918000 34:919000 36:920000 38:921000 40:922000 42:923000 44:924000 46:925000 48:926000 50:927000
+width|325b:8100|AU|2|51|implemented|0|0|41|candidate|29:916500 33:918500 37:920500 41:922500 45:924500 49:926500
+width|325b:8100|AU|4|52|implemented|0|0|39|candidate|31:917500 39:921500 47:925500
+width|325b:8100|AU|8|53|implemented|0|0|43|candidate|35:919500 43:923500

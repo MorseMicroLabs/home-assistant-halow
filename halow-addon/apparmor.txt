@@ -1,0 +1,349 @@
+# AppArmor profile for the Morse Micro Wi-Fi HaLow Access Point for Home Assistant.
+#
+# Status. It is checked statically (tests/test_apparmor.sh: the syntax with apparmor_parser
+# where available, and that every command and path the code in rootfs/ uses is covered). It
+# was first loaded in complain mode on the target device (audit evidence for open accesses
+# only, on the no-adapter and access-point-up paths without client traffic; the read rules
+# marked "observed" below come from it). It has since been loaded and run in enforce mode on
+# the target device in two live test sessions on Home Assistant OS 18.3 (start, operation, stop and restart, with
+# clients attached), with no denial caused by the add-on's own operations; the only denials
+# recorded came from diagnostic commands run by the testers, not from the add-on. That is
+# evidence from a small number of sessions on one device, not a complete audit. Home
+# Assistant OS 18.4 is the supported release; no denial review on 18.4 is recorded here. It
+# must be re-confirmed on a real device after every software update, and it must never ship in
+# complain mode. To re-check a change, add `complain` to the flags temporarily, exercise
+# start, operation, stop, restart and every failure path, read the host's audit log for
+# ALLOWED entries, adjust, then remove `complain` again.
+#
+# Format: one top-level profile named after the add-on slug (the Supervisor substitutes
+# its own installed name for it), flags attach_disconnected,mediate_deleted, following the
+# Home Assistant app example profile. Unlike that example it carries NO blanket `file,`
+# rule: every file access below is listed.
+#
+# How the rules were derived (by reading the code in rootfs/; only the read rules marked
+# "observed" were added from that complain-mode audit):
+#   Processes. s6-overlay (/init, /package, /command, /run/s6*) starts two legacy services
+#     from /etc/services.d: `manager` (root, the add-on's full grant) and `status`. Both are
+#     bash scripts run through with-contenv and bashio. The manager runs, by name:
+#       busybox applets (awk, cat, cp, date, dirname, find, grep, hostname, id, ln, ls,
+#         mkdir, mktemp, mount, mv, od, readlink, rm, rmdir, sed, sha256sum, sleep, sort,
+#         stat, sysctl, tac, tail, timeout, touch, tr, uname, wc, dmesg)  -> /bin/busybox
+#       ip, bridge, ss (iproute2)                                        -> /sbin/*
+#       iptables, ip6tables, iptables-restore, ip6tables-restore,
+#         iptables-save, ip6tables-save (all one nft multi-call binary)  -> /usr/sbin/xtables-nft-multi
+#       nft (read only: `nft list chain ... INPUT`, to see whether the INPUT
+#         base chain exists; its shared libraries are /usr/lib/lib*.so*, which
+#         the base abstraction already grants, and it opens nothing else but
+#         /etc/iproute2 and /usr/share/iproute2 names, already granted)   -> /usr/sbin/nft
+#       dnsmasq                                                          -> /usr/sbin/dnsmasq
+#       modprobe, insmod, rmmod, lsmod, modinfo (one multi-call binary)  -> /bin/kmod
+#       dbus-send                                                        -> /usr/bin/dbus-send
+#       hostapd_s1g, hostapd_cli_s1g (bundled; hostapd_s1g talks to the
+#         driver over nl80211 and needs no helper program)              -> /opt/halow/artifacts/*
+#       curl (bashio's Supervisor API calls)                             -> /usr/bin/curl
+#       s6-svc, s6-svstat (restart and state of the status service)      -> /usr/bin/s6-svc, /usr/bin/s6-svstat
+#     The status service's launcher (root) reads the Ingress port through bashio, then runs
+#     `s6-setuidgid halowstatus python3 .../status_server.py`; the Python process moves
+#     into the child profile `halow_status` below (no capabilities, read-only files).
+#   Capabilities. sys_module (driver loading), sys_admin (the mounts below only),
+#     net_admin (bridge, addresses, firewall, NAT), net_raw (DHCP and access-point packet
+#     sockets), net_bind_service (DNS on port 53, only if the container holds it at all),
+#     setuid/setgid (s6-setuidgid for the status service; dnsmasq itself runs as root
+#     under the add-on's --no-daemon invocation and is confined by this profile), kill (signalling
+#     hostapd, dnsmasq and the status server, which runs as another user), chown, fowner,
+#     fsetid, dac_override, dac_read_search (root file handling in /data and /run),
+#     syslog (dmesg excerpts for diagnostics; works only if the container holds it).
+#     A profile can only narrow what the container holds; it never adds a capability.
+#   Start-up. Before any service, s6-overlay runs /etc/cont-init.d/* as root; the add-on's
+#     one script there restricts /run/s6/container_environment (it holds the Supervisor
+#     token) to root (chown/chmod under /run, covered by the /run rule below).
+#   Mounts. The bind remount of the container's own /sys mount between read-only and
+#     read-write around the write of the host firmware search path (mount -o remount,bind,rw|ro
+#     /sys); the manager's tmpfs on /run/halow (so the rendered access-point configuration and
+#     the passphrase in it are memory-backed), the flags of both traced from the image's
+#     BusyBox mount under qemu-aarch64 -strace; and the narrow bracket around each write of a
+#     per-interface disable_ipv6 file (bind, bind remount and umount of that exact file, see
+#     below). Every other mount, remount and umount is denied by default because no rule
+#     grants one. The explicit denies are: the host-wide "all" and "default" disable_ipv6
+#     entries as mount source, as mount point, for remount and for umount; a write (`w`) to
+#     those same two files (the "all" and "default" disable_ipv6 file rule); and pivot_root.
+#     The remount rule's `options in (...)` list does not itself require `bind`, so a
+#     remount of that exact file mount without `bind` would match the rule as well. That
+#     reach is limited to the container's own procfs mount, and the add-on never does it.
+#   Files. Read: the add-on's own code and tables (/usr/lib/halow, /usr/share/halow,
+#     /etc/services.d), the bundled artifacts (/opt/halow/artifacts), the host's modules
+#     (/lib/modules, mounted read-only by kernel_modules), /proc (the /proc listing itself
+#     for the process identity scans, mounts, mountinfo, modules, boot id, ip_forward,
+#     process identity for supervision, and the kernel's TCP table /proc/net/tcp, which the
+#     manager reads (never connects) to see that the status service is listening), /sys (USB devices,
+#     network interfaces, module parameters). Read/write: /data (the persistent markers
+#     under halow_state, the staged firmware under halow_fw and the DHCP lease file under
+#     halow_leases, which dnsmasq opens, reads and rewrites; covered by the /data/** rule below,
+#     so no rule was added for it and the status child, which never reads the lease file
+#     (the manager puts what it needs into the snapshot), stays denied /data/**), /run (the add-on's
+#     /run/halow, hostapd's control socket, s6 state, and the status service's own liveness
+#     directory /run/halow-status, which the manager reads), /tmp (bashio and temporary files),
+#     /sys/module/firmware_class/parameters/path (the firmware search path),
+#     /proc/sys/net/ipv4/ip_forward (read to verify forwarding; the write is kept only so
+#     a forwarding change recorded by an earlier version can still be undone),
+#     /proc/sys/net/ipv6/conf/<interface>/disable_ipv6 (IPv6 off on the add-on's own
+#     interfaces, restored afterwards; writing the "all" and "default" entries is denied).
+#   Network. netlink (ip, bridge, ss, iptables over nf_tables, hostapd),
+#     packet (hostapd, dnsmasq DHCP), inet/inet6 (dnsmasq, the Supervisor API, the status
+#     page), unix (hostapd control interface, the host D-Bus socket).
+#   D-Bus. The host system bus at /run/dbus/system_bus_socket (host_dbus): the bus itself
+#     and NetworkManager only.
+# Left deliberately broad, with the reason:
+#   /bin/** and /usr/bin/** ix, /package/** ix, /command/** ix: kept from the example's
+#     s6-overlay section (s6 and bashio run many small tools). Inherited execution keeps
+#     this profile's own limits, so it does not widen what a process may touch.
+#   /run/** rwk and /tmp/** rwk: as in the example (s6 keeps its state under /run).
+#   /data/** rwkl: the add-on's own persistent volume; nothing else is mounted there.
+
+#include <tunables/global>
+
+profile morse_micro_halow_ap flags=(attach_disconnected,mediate_deleted) {
+  #include <abstractions/base>
+
+  # --- Capabilities (see the derivation above) ---
+  capability sys_module,
+  capability sys_admin,
+  capability net_admin,
+  capability net_raw,
+  capability net_bind_service,
+  capability setuid,
+  capability setgid,
+  capability kill,
+  capability chown,
+  capability fowner,
+  capability fsetid,
+  capability dac_override,
+  capability dac_read_search,
+  capability syslog,
+
+  # --- Signals and process inspection within the add-on ---
+  signal (send) set=(kill,term,int,hup,cont,usr1,usr2),
+  signal (send, receive) peer=@{profile_name},
+  signal (send) peer=@{profile_name}//halow_status,
+  signal (receive) peer=unconfined,
+  ptrace (read) peer=@{profile_name},
+  ptrace (read) peer=@{profile_name}//halow_status,
+
+  # --- Network ---
+  network netlink raw,
+  network netlink dgram,
+  network packet raw,
+  network packet dgram,
+  network inet stream,
+  network inet dgram,
+  network inet raw,
+  network inet6 stream,
+  network inet6 dgram,
+  network inet6 raw,
+  network unix stream,
+  network unix dgram,
+
+  # --- Mounts: the /sys bind remount around the firmware search path write, and the
+  # memory-backed run directory (nothing else) ---
+  # BusyBox `mount -o remount,bind,rw|ro /sys` re-applies the flags of the current /sys entry
+  # in /proc/mounts and always adds MS_SILENT; traced under qemu-aarch64 -strace against the
+  # container's /sys entry ("ro,nosuid,nodev,noexec,relatime"):
+  #   MS_BIND|MS_NODEV|MS_NOEXEC|MS_NOSUID|MS_RELATIME|MS_REMOUNT|MS_SILENT (+MS_RDONLY for ro)
+  remount options in (bind, ro, rw, nosuid, nodev, noexec, relatime, silent) /sys/,
+  # The manager's first act: `mount -t tmpfs -o mode=0755,size=<n>,nosuid,nodev,noexec tmpfs
+  # /run/halow`, traced the same way as MS_NODEV|MS_NOEXEC|MS_NOSUID|MS_SILENT with the mode
+  # and size as mount data. The mount lives in the container's own mount namespace and goes
+  # away with the container; it is never unmounted by the add-on.
+  mount fstype=tmpfs options=(rw, nosuid, nodev, noexec, silent) tmpfs -> /run/halow/,
+  # IPv6 off needs a write to /proc/sys/net/ipv6/conf/<interface>/disable_ipv6, which
+  # Docker's default read-only /proc/sys refuses (EROFS). ipv6.sh therefore brackets each
+  # single write: a container-local bind mount of that EXACT file onto itself, a bind
+  # remount of that mount to read-write, the write, then at once a read-only remount and an
+  # unmount of it. Only those three operations on that one path pattern are allowed; the
+  # "all" and "default" entries are denied for every one of them (an explicit deny beats the
+  # allow) as well as for writing. BusyBox, traced under qemu-aarch64 -strace:
+  #   mount -o bind F F             mount(F, F, NULL, MS_BIND|MS_SILENT)
+  #   mount -o remount,bind,rw F    mount("proc", F, "proc", MS_BIND|MS_NODEV|MS_NOEXEC|MS_NOSUID|MS_RELATIME|MS_REMOUNT|MS_SILENT)
+  #   mount -o remount,bind,ro F    the same with MS_RDONLY
+  #   umount F                      umount2(F, 0)
+  mount options in (bind, rw, silent) @{PROC}/sys/net/ipv6/conf/*/disable_ipv6 -> @{PROC}/sys/net/ipv6/conf/*/disable_ipv6,
+  remount options in (bind, ro, rw, nosuid, nodev, noexec, relatime, silent) @{PROC}/sys/net/ipv6/conf/*/disable_ipv6,
+  umount @{PROC}/sys/net/ipv6/conf/*/disable_ipv6,
+  deny mount @{PROC}/sys/net/ipv6/conf/{all,default}/disable_ipv6 -> @{PROC}/sys/net/ipv6/conf/{all,default}/disable_ipv6,
+  # The allow rule's "*" also matches "all" and "default", so a bind of another interface's file
+  # onto one of them (or of one of them onto an interface's file) would match it; these two
+  # denies catch every bind that has the host-wide entry on either side.
+  deny mount @{PROC}/sys/net/ipv6/conf/{all,default}/disable_ipv6,
+  deny mount -> @{PROC}/sys/net/ipv6/conf/{all,default}/disable_ipv6,
+  deny remount @{PROC}/sys/net/ipv6/conf/{all,default}/disable_ipv6,
+  deny umount @{PROC}/sys/net/ipv6/conf/{all,default}/disable_ipv6,
+  # There is no blanket `deny umount,`: an explicit deny beats any allow, so it could not
+  # coexist with the umount rule above. Every other umount (and mount and remount) is denied
+  # by default, because no rule grants one.
+  deny pivot_root,
+
+  # --- s6-overlay (from the app example) ---
+  /init ix,
+  /bin/** ix,
+  /usr/bin/** ix,
+  /run/{s6,s6-rc*,service}/** ix,
+  /package/** ix,
+  /command/** ix,
+  /etc/services.d/** rwix,
+  /etc/cont-init.d/** rwix,
+  /etc/cont-finish.d/** rwix,
+  /etc/s6-overlay/** rwix,
+  /run/{,**} rwk,
+  /dev/tty rw,
+
+  # --- Read opens observed in complain mode (no adapter present, and access point up with no client
+  # traffic; journal _TRANSPORT=audit; each logged as an open with
+  # requested_mask r that the rules above do not grant). `ix` allows execute only; interpreters
+  # (execlineb, sh) and the s6 tools also open these files for reading. Only the exact s6-overlay
+  # tree seen (3.2.3.2, from the base image: bump together with it), read only. NOT added: the
+  # /root/ and /usr/bin/ listings and /proc/<pid>/attr/current, which came from the
+  # investigator's own `docker exec` commands. ---
+  /init r,
+  /package/admin/s6-overlay-3.2.3.2/command/printcontenv r,
+  /package/admin/s6-overlay-3.2.3.2/command/with-contenv r,
+  /package/admin/s6-overlay-3.2.3.2/libexec/{preinit,stage0} r,
+  /package/admin/s6-overlay-3.2.3.2/etc/s6-linux-init/skel/{rc.init,rc.shutdown,rc.shutdown.final} r,
+  /package/admin/s6-overlay-3.2.3.2/etc/s6-rc/sources/{,**} r,
+  /package/admin/s6-overlay-3.2.3.2/etc/s6-rc/scripts/{cont-init,fix-attrs,services-up,services-down,cont-finish} r,
+  /etc/services.d/ r,
+  /etc/fix-attrs.d/ r,
+  /etc/cont-init.d/ r,
+
+  # --- Bashio (from the app example) ---
+  /usr/lib/bashio/** ix,
+  /tmp/{,**} rwk,
+
+  # --- Programs in sbin directories the code runs ---
+  /sbin/ip ix,
+  /sbin/bridge ix,
+  /sbin/ss ix,
+  /usr/sbin/xtables-nft-multi ix,
+  /usr/sbin/nft ix,
+  /usr/sbin/dnsmasq ix,
+
+  # --- The add-on's own code, tables and bundled artifacts ---
+  /usr/lib/halow/{,**} r,
+  /usr/share/halow/{,**} r,
+  /opt/halow/artifacts/{,**} r,
+  /opt/halow/artifacts/hostapd_s1g ix,
+  /opt/halow/artifacts/hostapd_cli_s1g ix,
+  # The status server runs under its own, narrower profile.
+  /usr/bin/python3.12 cx -> halow_status,
+
+  # --- Persistent add-on data: options, markers (halow_state), staged firmware (halow_fw) ---
+  /data/ r,
+  /data/** rwkl,
+
+  # --- System files read by the tools ---
+  /etc/hostname r,
+  /etc/hosts r,
+  /etc/resolv.conf r,
+  # Observed in complain mode (curl and hostapd_s1g, name resolution).
+  /etc/nsswitch.conf r,
+  /etc/passwd r,
+  /etc/group r,
+  /etc/protocols r,
+  /etc/services r,
+  /etc/ethertypes r,
+  /etc/iproute2/{,**} r,
+  /usr/share/iproute2/{,**} r,
+  /etc/modprobe.d/{,**} r,
+  /lib/modprobe.d/{,**} r,
+  /etc/machine-id r,
+  /var/lib/dbus/machine-id r,
+  /etc/ssl/{,**} r,
+  /usr/lib/xtables/** mr,
+  /var/run/{,**} rwk,
+  /dev/kmsg r,
+  /dev/rfkill rw,
+  /dev/urandom r,
+
+  # --- Host kernel modules (read-only mount from kernel_modules) ---
+  /lib/modules/ r,
+  /lib/modules/** r,
+
+  # --- /proc reads the code performs ---
+  # The /proc listing itself: without it `/proc/[0-9]*` does not expand and the process
+  # identity scans would see no process at all (the manager also refuses to start then).
+  @{PROC}/ r,
+  @{PROC}/mounts r,
+  @{PROC}/modules r,
+  @{PROC}/sys/kernel/random/boot_id r,
+  @{PROC}/sys/kernel/osrelease r,
+  @{PROC}/sys/kernel/version r,
+  @{PROC}/version r,
+  @{PROC}/config.gz r,
+  @{PROC}/sys/net/** r,
+  @{PROC}/sys/net/ipv4/ip_forward rw,
+  # IPv6 off on the radio, its per-station interfaces and the bridge (recorded and restored
+  # per interface); never the host-wide "all" or "default" entries.
+  @{PROC}/sys/net/ipv6/conf/*/disable_ipv6 rw,
+  deny @{PROC}/sys/net/ipv6/conf/{all,default}/disable_ipv6 w,
+  @{PROC}/net/** r,
+  @{PROC}/[0-9]*/{cmdline,comm,stat,status,environ,exe,fd/,mountinfo,mounts,net/**} r,
+  @{PROC}/self/** r,
+  @{PROC}/thread-self/** r,
+  @{PROC}/cmdline r,
+  @{PROC}/uptime r,
+
+  # --- /sys reads, and the one sysfs write ---
+  /sys/ r,
+  /sys/bus/usb/devices/{,**} r,
+  /sys/class/net/{,**} r,
+  /sys/devices/** r,
+  /sys/module/{,**} r,
+  /sys/module/firmware_class/parameters/path rw,
+  /sys/kernel/mm/transparent_hugepage/hpage_pmd_size r,
+
+  # --- Host D-Bus (host_dbus): the bus and NetworkManager only ---
+  /run/dbus/system_bus_socket rw,
+  dbus send bus=system path=/org/freedesktop/DBus interface=org.freedesktop.DBus member={Hello,AddMatch,RemoveMatch,GetNameOwner,NameHasOwner} peer=(name=org.freedesktop.DBus),
+  dbus (send, receive) bus=system peer=(name=org.freedesktop.NetworkManager),
+  dbus receive bus=system peer=(name=org.freedesktop.DBus),
+
+  # --- Status page server: non-root, no capabilities, read-only ---
+  profile halow_status flags=(attach_disconnected,mediate_deleted) {
+    #include <abstractions/base>
+
+    signal (receive) peer=@{profile_name},
+    signal (receive) peer=morse_micro_halow_ap,
+    signal (receive) peer=*_morse_micro_halow_ap,
+    signal (receive) peer=unconfined,
+
+    network inet stream,
+    network inet6 stream,
+
+    /usr/bin/python3.12 rm,
+    /usr/lib/python3.12/** r,
+    /usr/lib/python3.12/**.so mr,
+    /usr/lib/halow/status/{,**} r,
+    /run/halow/ r,
+    /run/halow/status.json r,
+    # The one place this process writes: its liveness counter, in a directory only it can
+    # use (owned by the status user, mode 0700, made by the launcher before this process
+    # starts). The counter is written to heartbeat.tmp and renamed over heartbeat.
+    /run/halow-status/ r,
+    /run/halow-status/heartbeat rw,
+    /run/halow-status/heartbeat.tmp rw,
+    /etc/passwd r,
+    /etc/group r,
+    # The three opens observed for this child in complain mode (no adapter, and access point up).
+    /etc/ssl/openssl.cnf r,
+    /etc/resolv.conf r,
+    /etc/hosts r,
+    /etc/localtime r,
+    /usr/share/zoneinfo/** r,
+    /dev/urandom r,
+    @{PROC}/self/** r,
+
+    deny /usr/lib/** w,
+    deny /data/** rw,
+    deny /run/halow/hostapd* rw,
+    deny /run/halow/*.conf rw,
+  }
+}

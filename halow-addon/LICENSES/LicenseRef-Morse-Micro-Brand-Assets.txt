@@ -1,0 +1,8 @@
+Copyright 2026 Morse Micro. All rights reserved.
+
+The Morse Micro name, logos and brand assets, including the files icon.png and
+logo.png in the halow-addon directory, are not licensed under the Apache
+License, Version 2.0.
+
+Their inclusion in this repository and in the container image does not grant
+permission for separate use.

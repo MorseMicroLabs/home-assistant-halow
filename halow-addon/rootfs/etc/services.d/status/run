@@ -1,0 +1,15 @@
+#!/usr/bin/with-contenv bashio
+# shellcheck shell=bash
+# Status service launcher. Runs as root only to wait for the manager's ready file, read
+# the Ingress port, verify that the unprivileged status user cannot read the Supervisor
+# token and record the port; then it starts the GET-only status server as that user (see
+# /usr/lib/halow/status/launcher.sh). Never passes the Supervisor token on.
+
+HALOW_LIB_DIR="${HALOW_LIB_DIR:-/usr/lib/halow}"
+# shellcheck source=/dev/null
+. "${HALOW_LIB_DIR}/constants.sh"
+# shellcheck source=/dev/null
+. "${HALOW_LIB_DIR}/status/launcher.sh"
+
+halow_status_launcher_main
+exit 1

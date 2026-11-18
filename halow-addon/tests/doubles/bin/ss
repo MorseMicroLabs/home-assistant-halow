@@ -1,0 +1,6 @@
+#!/bin/bash
+# Fake `ss`: prints the file HALOW_FAKE_SS (listening sockets in `ss -H -l -n -t -u` form)
+# and exits with HALOW_FAKE_SS_RC (default 0).
+printf 'ss %s\n' "$*" >> "${HALOW_FAKE_LOG:-/dev/null}"
+cat "${HALOW_FAKE_SS:-/dev/null}"
+exit "${HALOW_FAKE_SS_RC:-0}"

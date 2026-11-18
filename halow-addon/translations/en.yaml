@@ -1,0 +1,63 @@
+configuration:
+  wifi_ssid:
+    name: "Network name (SSID)"
+    description: >-
+      The name your devices look for. Up to 32 characters; some symbols may reduce the
+      maximum. Backslashes and line breaks are not accepted.
+  wifi_passphrase:
+    name: "Network passphrase"
+    description: >-
+      Required. 12 to 63 characters, using only standard keyboard characters (no accented
+      letters or emoji). The app does not start until you set one. It is included in Home
+      Assistant backups, so keep backups private.
+  region:
+    name: "Region"
+    description: >-
+      The country whose radio rules apply. Australia is supported in this release. Support
+      for additional regions is planned for future releases.
+  bandwidth:
+    name: "Bandwidth (MHz)"
+    description: >-
+      Channel width in MHz: 1, 2, 4, or 8. You always choose it; the app never changes it.
+      In manual mode, the channel must match.
+  radio_mode:
+    name: "Channel selection mode"
+    description: >-
+      Automatic: the app picks a channel each time it starts. Manual: it always uses the
+      channel set in Channel. Bandwidth is not affected.
+  channel:
+    name: "Channel (manual mode only)"
+    description: >-
+      Used only in manual mode; leave it on auto otherwise. The channel must match your
+      bandwidth (see the channel table on the Info page). Check it whenever you change the
+      bandwidth.
+  halow_subnet_cidr:
+    name: "Wi-Fi HaLow network address"
+    description: >-
+      The access point's own address and the size of the private network, for example
+      192.168.90.1/24. It must not overlap a network you already use.
+  dhcp_range_start:
+    name: "First client address"
+    description: >-
+      The first address given to your devices. It must be inside the network above and
+      different from the access point's own address.
+  dhcp_range_end:
+    name: "Last client address"
+    description: >-
+      The last address given to your devices. It must be inside the network above and come
+      after the first address.
+  uplink_interface:
+    name: "Uplink interface"
+    description: >-
+      The network interface your Wi-Fi HaLow devices use to reach your network and the
+      internet. Leave empty to use the interface associated with the default route. If
+      default routes use more than one interface, the app cannot choose between them; enter
+      the interface name here. Advanced: a physical network interface name such as end0.
+  allowed_ports:
+    name: "Allowed ports"
+    description: >-
+      Leave empty unless you need it. Lets Wi-Fi HaLow devices reach a service on your Home
+      Assistant Green, written as tcp/1883 or udp/5353 (lower case). Each entry makes a
+      service reachable to every device on the network, so add only services you understand
+      and intend to expose. Without entries, devices reach only DHCP (address assignment),
+      DNS (name lookup), and ping.

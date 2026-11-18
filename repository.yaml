@@ -1,0 +1,8 @@
+# Home Assistant custom repository metadata.
+# Reference: https://contributors.home-assistant.io/apps/guides/repository/
+# The repository ID derives from the URL, so the URL must stay stable once people use it.
+# There is deliberately no image field in this file: the app image is named by the image key
+# in halow-addon/config.yaml.
+name: "Morse Micro Labs"
+url: "https://github.com/MorseMicroLabs/home-assistant-halow"
+maintainer: "Morse Micro Labs"

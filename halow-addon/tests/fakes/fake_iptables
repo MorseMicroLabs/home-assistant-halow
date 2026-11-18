@@ -1,0 +1,355 @@
+#!/usr/bin/env bash
+# Fake iptables / ip6tables for the off-device tests. One script serves both: it behaves
+# as the family named by its invoked name (a symlink called `iptables` or `ip6tables`) or
+# by HALOW_FAKE_FW_NAME. Rule state lives under HALOW_FAKE_FW_DIR/<name>/<table>/.
+#
+# Supported: -w [secs], -t <table> (filter, nat), -N -F -X -A -I [pos] -D (spec|num)
+# -C -S [chain] -L [chain] (with -n/-v/--line-numbers accepted) -P -E. Exit codes follow
+# the real tool: 1 for "no such chain/rule", "chain already exists", "chain not empty",
+# "chain still referenced", "index too big"; 2 for a usage error; 3 for an unknown table.
+#
+# Rules are stored and compared TEXTUALLY (the arguments joined by single spaces). The
+# real tool compares rules semantically and prints them in a canonical form; the product
+# code therefore writes its rules in that canonical form and re-uses the printed form
+# (-S) when deleting, which this fake reproduces.
+#
+# Built-in chains: a real iptables-nft always LISTS the built-ins, but the nf_tables base
+# chain behind one exists only once something created it. The fake models that with a file
+# $TDIR/absent.<chain> (made by the tests; the fake_nft reads it): the first -A/-I/-P on the
+# chain creates it (removes the file), and -X of a built-in chain that is empty with policy
+# ACCEPT deletes it (recreates the file). -X of any other built-in chain is refused (exit 2);
+# -X of an absent one fails with exit 1 ("No chain/target/match by that name.", as the real tool).
+# HALOW_FAKE_FW_XBUILTIN_NOOP=1 makes every -X of a built-in chain print an error, change
+# nothing and exit 0 (a delete that silently did not happen: the caller must verify, not trust
+# the exit status).
+#
+# Every invocation is appended to HALOW_FAKE_FW_DIR/log as "<name> <args…>".
+# Failure injection (no state change, exit 4):
+#   HALOW_FAKE_FW_FAIL_MATCH  substring of "<name> <args…>" that makes a call fail
+#   HALOW_FAKE_FW_FAIL_AFTER  number of successful state-changing calls (both families
+#                             together) after which every state-changing call fails
+# Lock-hang injection (models another program holding the xtables lock):
+#   HALOW_FAKE_FW_LOCK_HELD=1 a call with "-w <seconds>" gives up at once with exit 4 (as
+#                             the real tool does once its bounded wait expires); a call
+#                             with a bare "-w" or no -w waits HALOW_FAKE_FW_HANG_S seconds
+#                             (default 30, standing in for "forever") and then exits 4.
+set -u
+
+NAME="${HALOW_FAKE_FW_NAME:-$(basename -- "$0")}"
+DIR="${HALOW_FAKE_FW_DIR:?HALOW_FAKE_FW_DIR must be set}"
+mkdir -p -- "$DIR"
+# HALOW_FAKE_FW_NOLOG=1 marks a call made by the test itself (setup or inspection): it is
+# not logged, not counted and never failure-injected.
+NOLOG="${HALOW_FAKE_FW_NOLOG:-}"
+if [ -z "$NOLOG" ]; then printf '%s %s\n' "$NAME" "$*" >> "$DIR/log"; fi
+
+err() { printf '%s: %s\n' "$NAME" "$1" >&2; exit "${2:-1}"; }
+
+# --- parse global options and the command ---
+TABLE=filter
+CMD=""
+CHAIN=""
+NUM=""
+NEWNAME=""
+WAIT_S=""
+SPEC=()
+args=("$@")
+i=0
+n=${#args[@]}
+while [ "$i" -lt "$n" ]; do
+    a="${args[$i]}"
+    case "$a" in
+        -w|--wait)
+            nxt="${args[$((i + 1))]:-}"
+            case "$nxt" in ''|*[!0-9.]*) ;; *) i=$((i + 1)); WAIT_S="$nxt" ;; esac
+            ;;
+        -t|--table) i=$((i + 1)); TABLE="${args[$i]:-}" ;;
+        -n|--numeric|-v|--verbose|--line-numbers|-x) ;;
+        -N|-F|-X|-A|-I|-D|-C|-S|-L|-P|-E)
+            [ -n "$CMD" ] && err "only one command allowed" 2
+            CMD="$a"
+            nxt="${args[$((i + 1))]:-}"
+            case "$nxt" in
+                -*|'') ;;
+                *) CHAIN="$nxt"; i=$((i + 1)) ;;
+            esac
+            case "$CMD" in
+                -I|-D|-L|-S)
+                    nxt="${args[$((i + 1))]:-}"
+                    case "$nxt" in ''|*[!0-9]*) ;; *) NUM="$nxt"; i=$((i + 1)) ;; esac
+                    ;;
+                -E|-P)
+                    NEWNAME="${args[$((i + 1))]:-}"; i=$((i + 1))
+                    ;;
+            esac
+            if [ "$CMD" = "-A" ] || [ "$CMD" = "-I" ] || [ "$CMD" = "-C" ] || { [ "$CMD" = "-D" ] && [ -z "$NUM" ]; }; then
+                i=$((i + 1))
+                while [ "$i" -lt "$n" ]; do
+                    case "${args[$i]}" in
+                        -w) nxt="${args[$((i + 1))]:-}"; case "$nxt" in ''|*[!0-9.]*) ;; *) i=$((i + 1)); WAIT_S="$nxt" ;; esac ;;
+                        *) SPEC+=("${args[$i]}") ;;
+                    esac
+                    i=$((i + 1))
+                done
+                break
+            fi
+            ;;
+        *) err "unexpected argument '$a'" 2 ;;
+    esac
+    i=$((i + 1))
+done
+[ -z "$CMD" ] && err "no command specified" 2
+
+case "$TABLE" in
+    filter) BUILTINS="INPUT FORWARD OUTPUT" ;;
+    nat) BUILTINS="PREROUTING INPUT OUTPUT POSTROUTING" ;;
+    *) err "can't initialize $NAME table \`$TABLE': Table does not exist" 3 ;;
+esac
+TDIR="$DIR/state/$NAME/$TABLE"
+if [ ! -d "$TDIR" ]; then
+    mkdir -p -- "$TDIR"
+    for c in $BUILTINS; do
+        printf '%s\n' "$c" >> "$TDIR/chains"
+        : > "$TDIR/rules.$c"
+        printf 'ACCEPT\n' > "$TDIR/policy.$c"
+    done
+fi
+
+chain_exists() { [ -f "$TDIR/rules.$1" ]; }
+is_builtin() { case " $BUILTINS " in *" $1 "*) return 0 ;; esac; return 1; }
+rule_count() { local c=0 l; while IFS= read -r l; do c=$((c + 1)); done < "$TDIR/rules.$1"; echo "$c"; }
+spec_text() { local IFS=' '; printf '%s' "${SPEC[*]}"; }
+spec_target() {
+    local j=0 m=${#SPEC[@]}
+    while [ "$j" -lt "$m" ]; do
+        if [ "${SPEC[$j]}" = "-j" ] || [ "${SPEC[$j]}" = "--jump" ]; then printf '%s' "${SPEC[$((j + 1))]:-}"; return 0; fi
+        j=$((j + 1))
+    done
+    return 1
+}
+check_target() {
+    local t
+    t="$(spec_target)" || return 0
+    case "$t" in
+        ACCEPT|DROP|RETURN|REJECT|LOG|MASQUERADE|DNAT|SNAT|REDIRECT) return 0 ;;
+    esac
+    chain_exists "$t" || err "Couldn't load target \`$t': No such file or directory" 2
+}
+referenced() { # referenced <chain> — 0 if any rule in the table jumps to it
+    local c l t
+    while IFS= read -r c; do
+        while IFS= read -r l; do
+            t=""
+            local -a w
+            read -r -a w <<< "$l"
+            local k=0
+            while [ "$k" -lt "${#w[@]}" ]; do
+                if [ "${w[$k]}" = "-j" ]; then t="${w[$((k + 1))]:-}"; fi
+                k=$((k + 1))
+            done
+            [ "$t" = "$1" ] && return 0
+        done < "$TDIR/rules.$c"
+    done < "$TDIR/chains"
+    return 1
+}
+mutating() {
+    case "$CMD" in -N|-F|-X|-A|-I|-D|-P|-E) return 0 ;; esac
+    return 1
+}
+need_chain() { chain_exists "$1" || err "No chain/target/match by that name." 1; }
+
+# --- failure injection ---
+if [ -n "$NOLOG" ]; then
+    unset HALOW_FAKE_FW_FAIL_MATCH HALOW_FAKE_FW_FAIL_AFTER HALOW_FAKE_FW_LOCK_HELD
+fi
+if [ -n "${HALOW_FAKE_FW_LOCK_HELD:-}" ]; then
+    if [ -n "$WAIT_S" ]; then
+        printf 'LOCK-TIMEOUT\n' >> "$DIR/log"
+        err "Another app is currently holding the xtables lock. Stopped waiting after ${WAIT_S}s." 4
+    fi
+    printf 'LOCK-HANG\n' >> "$DIR/log"
+    sleep "${HALOW_FAKE_FW_HANG_S:-30}"
+    err "Another app is currently holding the xtables lock." 4
+fi
+if [ -n "${HALOW_FAKE_FW_FAIL_MATCH:-}" ]; then
+    case "$NAME $*" in *"$HALOW_FAKE_FW_FAIL_MATCH"*) printf 'INJECTED-FAILURE\n' >> "$DIR/log"; err "injected failure" 4 ;; esac
+fi
+if mutating && [ -n "${HALOW_FAKE_FW_FAIL_AFTER:-}" ]; then
+    done_count=0
+    [ -f "$DIR/mutations" ] && done_count="$(cat "$DIR/mutations")"
+    if [ "$done_count" -ge "$HALOW_FAKE_FW_FAIL_AFTER" ]; then
+        printf 'INJECTED-FAILURE\n' >> "$DIR/log"
+        err "injected failure" 4
+    fi
+fi
+count_mutation() {
+    [ -n "$NOLOG" ] && return 0
+    local c=0
+    [ -f "$DIR/mutations" ] && c="$(cat "$DIR/mutations")"
+    printf '%s\n' $((c + 1)) > "$DIR/mutations"
+}
+
+print_chain_S() { # print_chain_S <chain>
+    local c="$1" l
+    if is_builtin "$c"; then printf -- '-P %s %s\n' "$c" "$(cat "$TDIR/policy.$c")"; else printf -- '-N %s\n' "$c"; fi
+}
+print_rules_S() {
+    local c="$1" l
+    while IFS= read -r l; do printf -- '-A %s %s\n' "$c" "$l"; done < "$TDIR/rules.$c"
+}
+
+case "$CMD" in
+    -N)
+        [ -z "$CHAIN" ] && err "-N requires a chain" 2
+        chain_exists "$CHAIN" && err "Chain already exists." 1
+        printf '%s\n' "$CHAIN" >> "$TDIR/chains"
+        : > "$TDIR/rules.$CHAIN"
+        count_mutation
+        ;;
+    -F)
+        if [ -z "$CHAIN" ]; then
+            while IFS= read -r c; do : > "$TDIR/rules.$c"; done < "$TDIR/chains"
+        else
+            need_chain "$CHAIN"
+            : > "$TDIR/rules.$CHAIN"
+        fi
+        count_mutation
+        ;;
+    -X)
+        [ -z "$CHAIN" ] && err "this fake refuses -X without a chain (it would delete foreign chains)" 2
+        need_chain "$CHAIN"
+        if is_builtin "$CHAIN"; then
+            if [ -n "${HALOW_FAKE_FW_XBUILTIN_NOOP:-}" ]; then
+                printf '%s: Directory not empty.\n' "$NAME" >&2
+                exit 0
+            fi
+            if [ -e "$TDIR/absent.$CHAIN" ]; then
+                err "No chain/target/match by that name." 1
+            fi
+            if [ "$(rule_count "$CHAIN")" -eq 0 ] && [ "$(cat "$TDIR/policy.$CHAIN")" = "ACCEPT" ] && ! referenced "$CHAIN"; then
+                : > "$TDIR/absent.$CHAIN"
+                count_mutation
+                exit 0
+            fi
+            err "Can't delete built-in chain" 2
+        fi
+        [ "$(rule_count "$CHAIN")" -ne 0 ] && err "Directory not empty." 1
+        referenced "$CHAIN" && err "Too many links." 1
+        rm -f -- "$TDIR/rules.$CHAIN"
+        grep -v -x -F -- "$CHAIN" "$TDIR/chains" > "$TDIR/chains.tmp" || true
+        mv -f -- "$TDIR/chains.tmp" "$TDIR/chains"
+        count_mutation
+        ;;
+    -P)
+        need_chain "$CHAIN"
+        is_builtin "$CHAIN" || err "Bad built-in chain name" 1
+        rm -f -- "$TDIR/absent.$CHAIN"
+        printf '%s\n' "$NEWNAME" > "$TDIR/policy.$CHAIN"
+        count_mutation
+        ;;
+    -E)
+        need_chain "$CHAIN"
+        chain_exists "$NEWNAME" && err "File exists." 1
+        is_builtin "$CHAIN" && err "Can't rename built-in chain" 2
+        mv -f -- "$TDIR/rules.$CHAIN" "$TDIR/rules.$NEWNAME"
+        sed "s/^${CHAIN}\$/${NEWNAME}/" "$TDIR/chains" > "$TDIR/chains.tmp" && mv -f -- "$TDIR/chains.tmp" "$TDIR/chains"
+        while IFS= read -r c; do
+            sed "s/ -j ${CHAIN}\$/ -j ${NEWNAME}/; s/^-j ${CHAIN}\$/-j ${NEWNAME}/" "$TDIR/rules.$c" > "$TDIR/r.tmp" && mv -f -- "$TDIR/r.tmp" "$TDIR/rules.$c"
+        done < "$TDIR/chains"
+        count_mutation
+        ;;
+    -A)
+        need_chain "$CHAIN"
+        [ "${#SPEC[@]}" -eq 0 ] && err "no rule given" 2
+        check_target
+        rm -f -- "$TDIR/absent.$CHAIN"
+        printf '%s\n' "$(spec_text)" >> "$TDIR/rules.$CHAIN"
+        count_mutation
+        ;;
+    -I)
+        need_chain "$CHAIN"
+        [ "${#SPEC[@]}" -eq 0 ] && err "no rule given" 2
+        check_target
+        pos="${NUM:-1}"
+        cnt="$(rule_count "$CHAIN")"
+        [ "$pos" -lt 1 ] && err "Invalid rule number" 2
+        [ "$pos" -gt $((cnt + 1)) ] && err "Index of insertion too big." 1
+        rm -f -- "$TDIR/absent.$CHAIN"
+        rule="$(spec_text)"
+        {
+            k=0
+            while IFS= read -r l; do
+                k=$((k + 1))
+                [ "$k" -eq "$pos" ] && printf '%s\n' "$rule"
+                printf '%s\n' "$l"
+            done < "$TDIR/rules.$CHAIN"
+            [ "$pos" -eq $((cnt + 1)) ] && printf '%s\n' "$rule"
+        } > "$TDIR/r.tmp"
+        mv -f -- "$TDIR/r.tmp" "$TDIR/rules.$CHAIN"
+        count_mutation
+        ;;
+    -D)
+        need_chain "$CHAIN"
+        cnt="$(rule_count "$CHAIN")"
+        if [ -n "$NUM" ]; then
+            { [ "$NUM" -lt 1 ] || [ "$NUM" -gt "$cnt" ]; } && err "Index of deletion too big." 1
+            target_line="$NUM"
+        else
+            rule="$(spec_text)"
+            target_line=0; k=0
+            while IFS= read -r l; do
+                k=$((k + 1))
+                if [ "$l" = "$rule" ]; then target_line="$k"; break; fi
+            done < "$TDIR/rules.$CHAIN"
+            [ "$target_line" -eq 0 ] && err "Bad rule (does a matching rule exist in that chain?)." 1
+        fi
+        k=0
+        while IFS= read -r l; do
+            k=$((k + 1))
+            [ "$k" -eq "$target_line" ] && continue
+            printf '%s\n' "$l"
+        done < "$TDIR/rules.$CHAIN" > "$TDIR/r.tmp"
+        mv -f -- "$TDIR/r.tmp" "$TDIR/rules.$CHAIN"
+        count_mutation
+        ;;
+    -C)
+        need_chain "$CHAIN"
+        rule="$(spec_text)"
+        while IFS= read -r l; do
+            [ "$l" = "$rule" ] && exit 0
+        done < "$TDIR/rules.$CHAIN"
+        err "Bad rule (does a matching rule exist in that chain?)." 1
+        ;;
+    -S)
+        if [ -n "$CHAIN" ]; then
+            need_chain "$CHAIN"
+            if [ -n "$NUM" ]; then
+                k=0
+                while IFS= read -r l; do k=$((k + 1)); [ "$k" -eq "$NUM" ] && printf -- '-A %s %s\n' "$CHAIN" "$l"; done < "$TDIR/rules.$CHAIN"
+            else
+                print_chain_S "$CHAIN"
+                print_rules_S "$CHAIN"
+            fi
+        else
+            while IFS= read -r c; do is_builtin "$c" && print_chain_S "$c"; done < "$TDIR/chains"
+            while IFS= read -r c; do is_builtin "$c" || print_chain_S "$c"; done < "$TDIR/chains"
+            while IFS= read -r c; do print_rules_S "$c"; done < "$TDIR/chains"
+        fi
+        ;;
+    -L)
+        list_one() {
+            local c="$1" l
+            if is_builtin "$c"; then printf 'Chain %s (policy %s)\n' "$c" "$(cat "$TDIR/policy.$c")"; else printf 'Chain %s (0 references)\n' "$c"; fi
+            printf 'target     prot opt source               destination\n'
+            while IFS= read -r l; do printf '%s\n' "$l"; done < "$TDIR/rules.$c"
+            printf '\n'
+        }
+        if [ -n "$CHAIN" ]; then
+            need_chain "$CHAIN"
+            list_one "$CHAIN"
+        else
+            while IFS= read -r c; do list_one "$c"; done < "$TDIR/chains"
+        fi
+        ;;
+esac
+exit 0

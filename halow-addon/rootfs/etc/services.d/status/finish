@@ -1,0 +1,11 @@
+#!/usr/bin/with-contenv bashio
+# shellcheck shell=bash
+# Status service finish hook: the status service changes nothing on the host, so there is
+# nothing to undo. Log why it stopped and let s6 start it again.
+
+if declare -F bashio::log.info >/dev/null; then
+    bashio::log.info "Status service stopped (exit code ${1:-unknown}); it is started again automatically"
+else
+    printf '%s\n' "status service: stopped (exit code ${1:-unknown})" >&2
+fi
+exit 0

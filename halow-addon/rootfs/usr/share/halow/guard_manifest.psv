@@ -1,0 +1,63 @@
+# Kernel compatibility manifest read by guard.sh (halow_guard_check).
+#
+# Format: one record per line, fields separated by '|'. Blank lines and lines starting with '#'
+# are ignored. Any other malformed or incomplete content makes the guard refuse.
+#
+#   release|<release>|vermagic|<vermagic the bundled and host modules must carry>
+#   kernel_build|<release>|uname_v|<kernel build string, as printed by "uname -v">
+#   kernel_banner|<release>|<exact text of /proc/version>
+#   kernel_config|<release>|<SHA-256 of the decompressed /proc/config.gz text>
+#   host_module|<release>|<cfg80211|mac80211|libarc4>|<path under /lib/modules/<release>>|<SHA-256 of the file as stored>|<GNU build-id>
+#   artifact|<release>|<bundled module file>|<srcversion of that file, or none>
+#
+# Every listed release needs exactly one release, kernel_build, kernel_banner and kernel_config
+# row, one host_module row for each of cfg80211, mac80211 and libarc4, and artifact rows for
+# morse.ko and dot11ah.ko. A release with an incomplete set is refused. A host_module path names
+# the exact file including its extension; its hash is of the file as stored (a compressed
+# module is hashed compressed).
+#
+# What the guard can and cannot establish: it identifies the exact official module files of
+# the supported release and the running kernel's banner and configuration. It cannot defend
+# against a hostile root user on the host or a kernel deliberately forged to mimic these
+# strings. Only the release listed here is accepted; a different Home Assistant OS release is
+# refused until its values are added.
+#
+# Why exactly one release is listed: the image bundles ONE flat set of modules (morse.ko and
+# dot11ah.ko), built for kernel 6.18.58. A host running any other kernel release could not load
+# them (vermagic mismatch), and the guard must not accept a release that the bundled modules
+# cannot load. The launch target is the current Home Assistant OS release (18.4); the rows
+# for 18.3 (kernel 6.18.52-haos) were therefore removed, not kept alongside. A host on 18.3 is
+# refused with the "not supported" message below, before anything on the host is changed.
+#
+# Where the values come from: the Home Assistant OS 18.4 release for the Home Assistant Green,
+# as published on the GitHub release (signature chain not verified), read from two public
+# artifacts that agreed on every value (their kernel and root filesystem images are
+# byte-identical):
+#   haos_green-18.4.img.xz  (disk image, 331564644 bytes)
+#     SHA-256 b5d9a4869a9c70a9d87946f8ba90c72b0a42b393404fa8bf82e161452b8c6aba
+#   haos_green-18.4.raucb   (update bundle, 206846360 bytes)
+#     SHA-256 8e7189352061686fb9c54bacdd6fe8fa700a50ec5af5630df1cf0af39ff25a3f
+# Both root filesystems carry each module once, uncompressed and signed with the build's own
+# generated key, so the file hashes are unique to the official build:
+#   kernel/net/wireless/cfg80211.ko  682489 bytes
+#   kernel/net/mac80211/mac80211.ko  956601 bytes
+#   kernel/lib/crypto/libarc4.ko       5177 bytes
+# The banner, the build string and the configuration hash (276698 bytes of decompressed
+# configuration) come from the same release's kernel image. The bundled morse.ko and dot11ah.ko
+# rows record those files' own srcversion; both modules were rebuilt for 6.18.58-haos and carry
+# its vermagic. None of the host values below has been compared with the modules on a real
+# device, and the rebuilt modules have not been loaded on one: unverified.
+#
+# Earlier versions of this file identified the host modules by per-module source hashes; the
+# supported kernel records none, so those rows were removed and replaced by the exact file
+# identity above.
+#
+release|6.18.58-haos|vermagic|6.18.58-haos SMP preempt mod_unload aarch64
+kernel_build|6.18.58-haos|uname_v|#1 SMP PREEMPT Tue Oct 27 13:46:33 UTC 2026
+kernel_banner|6.18.58-haos|Linux version 6.18.58-haos (builder@4772b50a3096) (aarch64-buildroot-linux-gnu-gcc.br_real (Buildroot -g30c038aa) 13.4.0, GNU ld (GNU Binutils) 2.43.1) #1 SMP PREEMPT Tue Oct 27 13:46:33 UTC 2026
+kernel_config|6.18.58-haos|a4426c779010b70d480504acc70948c3363960d2d0a5fe1fba1c32cd3b1aac4c
+host_module|6.18.58-haos|cfg80211|kernel/net/wireless/cfg80211.ko|0088a887c9d7769ca78abbd75a782689a18722bc3b893e7cdf5439d119a1d6d0|834e2f76f0eac52d7b86865b3395d8b80de77a1d
+host_module|6.18.58-haos|mac80211|kernel/net/mac80211/mac80211.ko|16102dc27141a53f4195f088a229b028100f9a462be04aa437161049ef108491|488f6476e6cc4b0e6923e1cbbe73d98062c583f4
+host_module|6.18.58-haos|libarc4|kernel/lib/crypto/libarc4.ko|55fc535dc37531f422ab8b24d5aad4e774462456a4acafd9659228893cc53443|5442ed198511acfe5f406a44bbdce6056c32cb29
+artifact|6.18.58-haos|morse.ko|C601E85123B2E7F4B6A44FE
+artifact|6.18.58-haos|dot11ah.ko|3B02991D4DB75E404FAEB63

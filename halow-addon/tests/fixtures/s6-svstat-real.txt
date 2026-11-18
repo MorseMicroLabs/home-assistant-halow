@@ -1,0 +1,58 @@
+# Real output of s6-svstat, captured from the add-on image (morse-micro-halow-ap:local, built from the
+# pinned base image) with s6 2.15.1.0 (s6-overlay 3.2.3.2, aarch64, /usr/bin/s6-svstat): a
+# throwaway container ran s6-svscan over a scratch service directory and s6-svstat was run
+# against services in each state. Nothing here is edited except the section names.
+#
+# Format: "@@ <name> rc=<exit status>", the output lines, "@@ end". The tests read these
+# sections instead of inventing output, so the fakes cannot drift from the real program.
+# The *_o sections are `s6-svstat -o up,pid <dir>` (what the manager runs); the *_plain
+# sections are `s6-svstat <dir>` (the human-readable form, which the manager does not parse).
+# Note `pgid N` in the plain form of s6 2.15.1.0.
+@@ up_o rc=0
+true 47
+@@ end
+@@ up_plain rc=0
+up (pid 47 pgid 47) 2 seconds
+@@ end
+@@ never_started_o rc=0
+false -1
+@@ end
+@@ never_started_plain rc=0
+down (not started yet)
+@@ end
+@@ unsupervised_early_o rc=0
+false -1
+@@ end
+@@ unsupervised_early_plain rc=0
+down (not started yet) , normally up, want up
+@@ end
+@@ missing_o rc=1
+s6-svstat: fatal: unable to read status for /tmp/sv/nonexistent: s6-supervise not running
+@@ end
+@@ missing_plain rc=1
+s6-svstat: fatal: unable to read status for /tmp/sv/nonexistent: s6-supervise not running
+@@ end
+@@ want_down_o rc=0
+true 45
+@@ end
+@@ want_down_plain rc=0
+up (pid 45 pgid 45) 5 seconds, want down
+@@ end
+@@ killed_o rc=0
+false -1
+@@ end
+@@ killed_plain rc=0
+down (signal SIGKILL) 1 seconds, normally up, ready 1 seconds
+@@ end
+@@ normally_down_up_o rc=0
+true 145
+@@ end
+@@ normally_down_up_plain rc=0
+up (pid 145 pgid 145) 1 seconds, normally down
+@@ end
+@@ stopped_o rc=0
+false -1
+@@ end
+@@ stopped_plain rc=0
+down (signal SIGTERM) 1 seconds, ready 1 seconds
+@@ end
