@@ -3,4 +3,5 @@
 # published: record exactly the two lines that tools/final_publication_check.sh prints after a full check from outside
 #   (status: published and manifest-sha256: <sha256 of ASSETS.psv>). Gate 14 checks the checksum against the current manifest.
 # This file is not copied into the image.
-status: prepared
+status: published
+manifest-sha256: a1aef0dcf33fb35009bff01d42296c5f037e763809e238c2a87bbb69d4d6ddec
