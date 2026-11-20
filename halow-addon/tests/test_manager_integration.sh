@@ -23,7 +23,7 @@ TESTS_DIR="$(pwd)"
 if ! unshare -rm true 2>/dev/null; then
     echo "  SKIP: unprivileged user and mount namespaces are not available here; this suite did not run"
     echo "test_manager_integration: 0/0 passed (skipped)"
-    exit 1
+    exit 77
 fi
 
 world() {
